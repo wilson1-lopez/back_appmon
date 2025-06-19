@@ -79,7 +79,7 @@ export default class AuthService {
                 `)
         })
 
-        return { status: 'ok', message: 'Si el correo existe, se enviará un enlace de recuperación.' }
+        return { status: 'ok', message: 'Revisa tu correo para continuar' }
     }
 
     // Restablecer contraseña usando el token
@@ -89,7 +89,7 @@ export default class AuthService {
             payload = jwt.verify(token, this.jwtSecret)
         } catch (error: any) {
             if (error.name === 'TokenExpiredError') {
-                throw new Error('Token expirado')
+                throw new Error('Este enlace ha expirado, solicita uno nuevo')
             }
             if (error.name === 'JsonWebTokenError') {
                 throw new Error('Token inválido')
@@ -115,7 +115,7 @@ export default class AuthService {
         user.password = await Hash.make(newPassword)
         await user.save()
 
-        return { status: 'success', message: 'Contraseña restablecida exitosamente' }
+        return { status: 'success', message: 'Tu contraseña ha sido actualizada, ahora puedes iniciar sesión' }
     }
 
 }
