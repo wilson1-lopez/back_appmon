@@ -3,6 +3,14 @@ import env from '#start/env'
 import Hash from '@adonisjs/core/services/hash'
 import jwt from 'jsonwebtoken'
 import mail from '@adonisjs/mail/services/main'
+import admin from 'firebase-admin'
+
+// Inicializa Firebase Admin si no está inicializado
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(), // O usa admin.credential.cert(serviceAccount) si tienes el archivo
+  });
+}
 
 export default class AuthService {
     private jwtSecret = env.get('JWT_SECRET')!
@@ -116,6 +124,42 @@ export default class AuthService {
         await user.save()
 
         return { status: 'success', message: 'Tu contraseña ha sido actualizada, ahora puedes iniciar sesión' }
+    }
+
+    public async loginWithGoogle(idToken: string) {
+        let decodedToken;
+        try {
+            decodedToken = await admin.auth().verifyIdToken(idToken);
+        } catch (err) {
+            console.error('Error al verificar idToken de Firebase:', err);
+            throw new Error('Token de Google inválido');
+        }
+
+        const email = decodedToken.email;
+        if (!email) {
+            throw new Error('No se pudo obtener información del usuario de Google');
+        }
+
+        // Busca el usuario por email
+        const user = await User.query().where('email', email).first();
+        if (!user) {
+            throw new Error('Usuario no registrado');
+            // O puedes crear el usuario aquí si quieres registro automático
+        }
+
+        if (!user.isActive) {
+            return { status: 'inactive', message: 'La cuenta aún no está activada. Por favor, revise su correo para activarla.' }
+        }
+
+        // Genera el JWT de tu app
+        const appPayload = {
+            sub: user.id,
+            email: user.email,
+            username: user.username,
+        }
+        const token = jwt.sign(appPayload, this.jwtSecret, { expiresIn: '1d' })
+
+        return { status: 'success', message: 'Login exitoso', token }
     }
 
 }

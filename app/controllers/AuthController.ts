@@ -32,4 +32,15 @@ export default class AuthController {
       return response.badRequest({ error: error.message })
     }
   }
+
+  // POST /auth/google-login
+  public async googleLogin({ request, response }: HttpContext) {
+    const idToken = request.input('idToken')
+    try {
+      const result = await this.authService.loginWithGoogle(idToken)
+      return response.ok(result)
+    } catch (error) {
+      return response.unauthorized({ error: error.message })
+    }
+  }
 }
