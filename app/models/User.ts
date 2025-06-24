@@ -1,5 +1,7 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, column, manyToMany } from '@adonisjs/lucid/orm'
+import type { ManyToMany } from '@adonisjs/lucid/types/relations'
+import Role from './Role.js'
 
 export default class User extends BaseModel {
   public static table = 'cf_usuarios'
@@ -30,4 +32,14 @@ export default class User extends BaseModel {
 
   @column.dateTime({ columnName: 'updated_at' })
   public updatedAt!: DateTime
+
+  // Relación many-to-many con roles
+  @manyToMany(() => Role, {
+    pivotTable: 'cf_usuario_rol',
+    localKey: 'id',
+    pivotForeignKey: 'usuario_id',
+    relatedKey: 'id',
+    pivotRelatedForeignKey: 'rol_id',
+  })
+  public roles!: ManyToMany<typeof Role>
 }

@@ -15,11 +15,70 @@ if (!admin.apps.length) {
 export default class AuthService {
     private jwtSecret = env.get('JWT_SECRET')!
 
-    public async login(identifier: string, password: string) {
+    /**
+     * Helper para obtener usuario con roles y permisos
+     */
+    private async getUserWithRolesAndPermissions(identifier: string) {
         const user = await User.query()
             .where('email', identifier)
             .orWhere('username', identifier)
+            .preload('roles', (roleQuery) => {
+                roleQuery
+                    .where('estado', true) // Solo roles activos
+                    .preload('permissions', (permissionQuery) => {
+                        permissionQuery.preload('feature')
+                    })
+            })
             .first()
+
+        return user
+    }
+
+    /**
+     * Generar payload JWT con roles y permisos
+     */
+    private generateJWTPayload(user: any) {
+        // Extraer roles
+        const roles = user.roles.map((role: any) => ({
+            id: role.id,
+            name: role.name,
+            description: role.description
+        }))
+
+        // Extraer permisos agrupados por funcionalidad
+        const permissions: any = {}
+        user.roles.forEach((role: any) => {
+            role.permissions.forEach((permission: any) => {
+                const featureName = permission.feature.name
+                if (!permissions[featureName]) {
+                    permissions[featureName] = {
+                        featureId: permission.feature.id,
+                        canView: false,
+                        canCreate: false,
+                        canEdit: false,
+                        canDelete: false
+                    }
+                }
+                
+                // Combinar permisos (OR lógico - si cualquier rol permite algo, el usuario puede hacerlo)
+                permissions[featureName].canView = permissions[featureName].canView || permission.canView
+                permissions[featureName].canCreate = permissions[featureName].canCreate || permission.canCreate
+                permissions[featureName].canEdit = permissions[featureName].canEdit || permission.canEdit
+                permissions[featureName].canDelete = permissions[featureName].canDelete || permission.canDelete
+            })
+        })
+
+        return {
+            sub: user.id,
+            email: user.email,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            roles: roles,
+            permissions: permissions
+        }
+    }    public async login(identifier: string, password: string) {
+        const user = await this.getUserWithRolesAndPermissions(identifier)
 
         if (!user) {
             throw new Error('Invalid credentials')
@@ -32,17 +91,15 @@ export default class AuthService {
 
         if (!user.isActive) {
             return { status: 'inactive', message: 'La cuenta aún no está activada. Por favor, revise su correo para activarla.' }
-        }
-
-        // Generar token JWT
-        const payload = {
-            sub: user.id,
-            email: user.email,
-            username: user.username,
-        }
+        }        // Generar token JWT con roles y permisos
+        const payload = this.generateJWTPayload(user)
         const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1d' })
 
-        return { status: 'success', message: 'Login exitoso', token }
+        return { 
+            status: 'success', 
+            message: 'Login exitoso', 
+            token
+        }
     }
 
     // Solicitar recuperación de contraseña
@@ -124,9 +181,7 @@ export default class AuthService {
         await user.save()
 
         return { status: 'success', message: 'Tu contraseña ha sido actualizada, ahora puedes iniciar sesión' }
-    }
-
-    public async loginWithGoogle(idToken: string) {
+    }    public async loginWithGoogle(idToken: string) {
         let decodedToken;
         try {
             decodedToken = await admin.auth().verifyIdToken(idToken);
@@ -140,8 +195,8 @@ export default class AuthService {
             throw new Error('No se pudo obtener información del usuario de Google');
         }
 
-        // Busca el usuario por email
-        const user = await User.query().where('email', email).first();
+        // Busca el usuario por email con roles y permisos
+        const user = await this.getUserWithRolesAndPermissions(email);
         if (!user) {
             throw new Error('Usuario no registrado');
             // O puedes crear el usuario aquí si quieres registro automático
@@ -149,17 +204,70 @@ export default class AuthService {
 
         if (!user.isActive) {
             return { status: 'inactive', message: 'La cuenta aún no está activada. Por favor, revise su correo para activarla.' }
+        }        // Genera el JWT de tu app con roles y permisos
+        const payload = this.generateJWTPayload(user)
+        const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1d' })
+
+        return { 
+            status: 'success', 
+            message: 'Login exitoso', 
+            token
+        }
+    }
+
+    /**
+     * Obtener información completa del usuario actual (desde JWT o por ID)
+     */
+    public async getCurrentUser(userId: string) {
+        const user = await User.query()
+            .where('id', userId)
+            .preload('roles', (roleQuery) => {
+                roleQuery
+                    .where('estado', true)
+                    .preload('permissions', (permissionQuery) => {
+                        permissionQuery.preload('feature')
+                    })
+            })
+            .first()
+
+        if (!user) {
+            throw new Error('Usuario no encontrado')
         }
 
-        // Genera el JWT de tu app
-        const appPayload = {
-            sub: user.id,
+        const payload = this.generateJWTPayload(user)
+        
+        return {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
             email: user.email,
             username: user.username,
+            isActive: user.isActive,
+            roles: payload.roles,
+            permissions: payload.permissions
         }
-        const token = jwt.sign(appPayload, this.jwtSecret, { expiresIn: '1d' })
+    }
 
-        return { status: 'success', message: 'Login exitoso', token }
+    /**
+     * Refrescar token con roles actualizados
+     */
+    public async refreshToken(userId: string) {
+        const user = await this.getUserWithRolesAndPermissions(userId)
+        
+        if (!user) {
+            throw new Error('Usuario no encontrado')
+        }
+
+        if (!user.isActive) {
+            throw new Error('Usuario inactivo')
+        }        const payload = this.generateJWTPayload(user)
+        const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1d' })
+
+        return {
+            status: 'success',
+            message: 'Token refrescado exitosamente',
+            token
+        }
     }
 
 }

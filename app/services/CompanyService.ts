@@ -166,4 +166,88 @@ public async resendActivationByToken(token: string) {
   return { status: 'resent', message: 'Correo de activación reenviado' }
 }
 
+
+  /**
+   * Obtener información completa de una empresa por ID
+   */
+  public async getCompanyById(companyId: string) {
+    const company = await Company
+      .query()
+      .where('id', companyId)
+      .preload('documentType', (query) => {
+        query.preload('baseType')
+      })
+      .preload('companyType')
+      .preload('country')
+      .preload('department')
+      .preload('city')
+      .first()
+
+    return company
+  }
+
+  /**
+   * Obtener información completa de una empresa por email
+   */
+  public async getCompanyByEmail(email: string) {
+    const company = await Company
+      .query()
+      .where('email', email)
+      .preload('documentType', (query) => {
+        query.preload('baseType')
+      })
+      .preload('companyType')
+      .preload('country')
+      .preload('department')
+      .preload('city')
+      .first()
+
+    return company
+  }
+
+  /**
+   * Obtener lista de empresas con paginación y filtros
+   */
+  public async getCompanies(options: {
+    page?: number
+    limit?: number
+    status?: string
+  }) {
+    const { page = 1, limit = 10, status } = options
+    
+    const query = Company
+      .query()
+      .preload('documentType', (query) => {
+        query.preload('baseType')
+      })
+      .preload('companyType')
+      .preload('country')
+      .preload('department')
+      .preload('city')
+
+    if (status) {
+      query.where('status', status)
+    }
+
+    const companies = await query.paginate(page, limit)
+    return companies
+  }
+
+  /**
+   * Actualizar información de una empresa
+   */
+  public async updateCompany(companyId: string, updateData: any) {
+    const company = await Company.find(companyId)
+    
+    if (!company) {
+      throw new Error('Empresa no encontrada')
+    }
+
+    company.merge(updateData)
+    await company.save()
+
+    // Retornar la empresa actualizada con sus relaciones
+    return await this.getCompanyById(companyId)
+  }
+
 }

@@ -1,5 +1,8 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
+import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import Role from './Role.js'
+import Feature from './Feature.js'
 
 export default class Permission extends BaseModel {
   public static table = 'cf_permisos'
@@ -30,4 +33,15 @@ export default class Permission extends BaseModel {
 
   @column.dateTime({ columnName: 'updated_at' })
   public updatedAt!: DateTime
+
+  // Relaciones
+  @belongsTo(() => Role, {
+    foreignKey: 'roleId',
+  })
+  public role!: BelongsTo<typeof Role>
+
+  @belongsTo(() => Feature, {
+    foreignKey: 'featureId',
+  })
+  public feature!: BelongsTo<typeof Feature>
 }

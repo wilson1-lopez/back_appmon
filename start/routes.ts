@@ -19,5 +19,6 @@ router.get('/', async () => {
 import './routes/auth.ts'
 import './routes/countries.ts'
 import './routes/account.ts'
+import './routes/companies.ts'
 
 
