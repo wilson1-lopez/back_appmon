@@ -1,5 +1,9 @@
 import router from '@adonisjs/core/services/router'
 import CompanyController from '#controllers/CompanyController'
+import FileController from '#controllers/FileController'
+
+// Ruta para servir los logos
+router.get('/uploads/logos/:filename', [FileController, 'serveLogo'])
 
 // Rutas para gestión de empresas
 router.group(() => {
@@ -14,5 +18,8 @@ router.group(() => {
   
   // Actualizar empresa
   router.put('/:id', [CompanyController, 'update'])
+  
+  // Subir logo de empresa
+  router.post('/:id/logo', [CompanyController, 'uploadLogo'])
   
 }).prefix('/companies')

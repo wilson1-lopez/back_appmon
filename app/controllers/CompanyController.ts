@@ -64,17 +64,20 @@ export default class CompanyController {
     } catch (error) {
       return response.badRequest({ error: error.message })
     }
-  }
-
-  /**
+  }  /**
    * Actualizar información de la empresa
+   * Solo permite actualizar: nombre, dirección, departamento, ciudad, teléfono y logo
    */
   public async update({ params, request, response }: HttpContext) {
     try {
       const companyId = params.id
       const updateData = request.only([
-        'name', 'address', 'phone', 'email', 'logoUrl', 
-        'companyTypeId', 'status', 'countryId', 'stateId', 'cityId'
+        'name',       // nombre de la empresa
+        'address',    // dirección
+        'phone',      // teléfono
+        'logoUrl',    // logo de la empresa
+        'stateId',    // departamento (ID)
+        'cityId'      // ciudad (ID)
       ])
       
       const company = await this.companyService.updateCompany(companyId, updateData)
@@ -83,6 +86,38 @@ export default class CompanyController {
         message: 'Empresa actualizada exitosamente',
         data: company 
       })
+    } catch (error) {
+      return response.badRequest({ error: error.message })
+    }
+  }
+
+  /**
+   * Subir y guardar logo de la empresa
+   */
+  public async uploadLogo({ params, request, response }: HttpContext) {    try {
+      const companyId = params.id
+
+      // Obtener el archivo del request
+      const logoFile = request.file('logo', {
+        size: '5mb',
+        extnames: ['jpg', 'jpeg', 'png', 'webp']
+      })
+
+      if (!logoFile) {
+        return response.badRequest({ error: 'No se ha enviado ningún archivo de logo' })
+      }
+
+      // Usar el servicio para manejar la subida del logo
+      const result = await this.companyService.uploadLogo(companyId, logoFile)
+
+      return response.ok({
+        message: 'Logo guardado exitosamente',
+        data: {
+          logo_url: result.logoUrl,
+          company: result.company
+        }
+      })
+
     } catch (error) {
       return response.badRequest({ error: error.message })
     }

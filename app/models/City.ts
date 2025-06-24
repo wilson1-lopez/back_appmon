@@ -1,5 +1,7 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
+import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import Department from './Department.js'
 
 export default class City extends BaseModel {
   public static table = 'am_ciudades'
@@ -21,4 +23,9 @@ export default class City extends BaseModel {
 
   @column.dateTime({ columnName: 'updated_at' })
   public updatedAt!: DateTime
+
+  @belongsTo(() => Department, {
+    foreignKey: 'departmentId',
+  })
+  public department!: BelongsTo<typeof Department>
 }

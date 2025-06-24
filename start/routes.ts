@@ -18,6 +18,7 @@ router.get('/', async () => {
 // Importar rutas organizadas
 import './routes/auth.ts'
 import './routes/countries.ts'
+import './routes/locations.ts'
 import './routes/account.ts'
 import './routes/companies.ts'
 

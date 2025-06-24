@@ -1,5 +1,7 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column } from '@adonisjs/lucid/orm'
+import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
+import type { HasMany } from '@adonisjs/lucid/types/relations'
+import Department from './Department.js'
 
 export default class Country extends BaseModel {
   public static table = 'am_paises'
@@ -21,4 +23,9 @@ export default class Country extends BaseModel {
 
   @column.dateTime({ columnName: 'updated_at' })
   public updatedAt!: DateTime
+
+  @hasMany(() => Department, {
+    foreignKey: 'countryId',
+  })
+  public departments!: HasMany<typeof Department>
 }

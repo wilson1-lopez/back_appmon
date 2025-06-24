@@ -2,7 +2,13 @@ import User from '#models/User'
 import Company from '#models/Company'
 import env from '#start/env'
 import jwt from 'jsonwebtoken'
-import mail from '@adonisjs/mail/services/main' // <-- Agrega esta línea
+import mail from '@adonisjs/mail/services/main'
+import { cuid } from '@adonisjs/core/helpers'
+import app from '@adonisjs/core/services/app'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import type { MultipartFile } from '@adonisjs/core/bodyparser'
 
 
 
@@ -248,6 +254,48 @@ public async resendActivationByToken(token: string) {
 
     // Retornar la empresa actualizada con sus relaciones
     return await this.getCompanyById(companyId)
+  }
+
+  /**
+   * Subir y guardar logo de la empresa
+   */
+  public async uploadLogo(companyId: string, logoFile: MultipartFile) {
+    // Verificar que la empresa existe
+    const company = await Company.find(companyId)
+    if (!company) {
+      throw new Error('Empresa no encontrada')
+    }
+
+    // Validar el archivo
+    if (!logoFile.isValid) {
+      throw new Error(`Archivo inválido: ${logoFile.errors.map(e => e.message).join(', ')}`)
+    }
+
+    // Crear directorio de uploads si no existe
+    const uploadsDir = join(app.makePath('public'), 'uploads', 'logos')
+    if (!existsSync(uploadsDir)) {
+      await mkdir(uploadsDir, { recursive: true })
+    }
+
+    // Generar nombre único para el archivo
+    const fileExtension = logoFile.extname
+    const fileName = `${companyId}_${cuid()}.${fileExtension}`
+    
+    // Mover el archivo a la ubicación final
+    await logoFile.move(uploadsDir, {
+      name: fileName
+    })
+
+    // Construir la URL del logo
+    const logoUrl = `/uploads/logos/${fileName}`
+
+    // Actualizar la empresa con la nueva URL del logo
+    const updatedCompany = await this.updateCompany(companyId, { logoUrl })
+
+    return {
+      logoUrl,
+      company: updatedCompany
+    }
   }
 
 }
