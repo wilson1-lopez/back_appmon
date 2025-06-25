@@ -71,7 +71,8 @@ export default class AuthService {
         return {
             sub: user.id,
             email: user.email,
-            username: user.username,
+            username: user.firstName, 
+            displayName: `${user.firstName} ${user.lastName || ''}`.trim(), 
             firstName: user.firstName,
             lastName: user.lastName,
             roles: roles,
@@ -199,7 +200,7 @@ export default class AuthService {
         const user = await this.getUserWithRolesAndPermissions(email);
         if (!user) {
             throw new Error('Usuario no registrado');
-            // O puedes crear el usuario aquí si quieres registro automático
+           
         }
 
         if (!user.isActive) {
@@ -241,8 +242,8 @@ export default class AuthService {
             firstName: user.firstName,
             lastName: user.lastName,
             email: user.email,
-            username: user.username,
-            isActive: user.isActive,
+            username: user.firstName,
+            displayName: `${user.firstName} ${user.lastName || ''}`.trim(), 
             roles: payload.roles,
             permissions: payload.permissions
         }
