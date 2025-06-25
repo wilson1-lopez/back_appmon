@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken'
 import mail from '@adonisjs/mail/services/main'
 import { cuid } from '@adonisjs/core/helpers'
 import app from '@adonisjs/core/services/app'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
@@ -275,6 +275,23 @@ public async resendActivationByToken(token: string) {
     const uploadsDir = join(app.makePath('public'), 'uploads', 'logos')
     if (!existsSync(uploadsDir)) {
       await mkdir(uploadsDir, { recursive: true })
+    }
+
+    // Eliminar logo anterior si existe
+    if (company.logoUrl) {
+      try {
+        // Extraer el nombre del archivo de la URL
+        const oldFileName = company.logoUrl.split('/').pop()
+        if (oldFileName) {
+          const oldFilePath = join(uploadsDir, oldFileName)
+          if (existsSync(oldFilePath)) {
+            await unlink(oldFilePath)
+          }
+        }
+      } catch (error) {
+        // Log del error pero continúa con el proceso de subida
+        console.warn('Error al eliminar logo anterior:', error)
+      }
     }
 
     // Generar nombre único para el archivo

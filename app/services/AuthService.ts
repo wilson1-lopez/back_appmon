@@ -8,7 +8,7 @@ import admin from 'firebase-admin'
 // Inicializa Firebase Admin si no está inicializado
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.applicationDefault(), // O usa admin.credential.cert(serviceAccount) si tienes el archivo
+    credential: admin.credential.applicationDefault(), 
   });
 }
 
