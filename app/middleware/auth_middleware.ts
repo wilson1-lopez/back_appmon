@@ -2,7 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import jwt from 'jsonwebtoken'
 import env from '#start/env'
-import '../../../types/auth.js'
+import '../../types/auth.js'
 
 export default class AuthMiddleware {
   private jwtSecret = env.get('JWT_SECRET')!
