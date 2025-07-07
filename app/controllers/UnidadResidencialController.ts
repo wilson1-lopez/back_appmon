@@ -80,6 +80,27 @@ export default class UnidadResidencialController {
   }
 
   /**
+   * Listar todas las unidades residenciales de la empresa del usuario (sin paginación)
+   */
+  public async all({ request, response, auth }: HttpContext) {
+    try {
+      if (!auth?.user?.email) {
+        return response.unauthorized({ error: 'Usuario no autenticado' })
+      }
+
+      const search = request.input('search', '')
+      const unidadesResidenciales = await this.unidadResidencialService.getAllByCompany(auth.user.email, { search })
+
+      return response.ok({
+        message: 'Lista completa de unidades residenciales obtenida exitosamente',
+        data: unidadesResidenciales
+      })
+    } catch (error) {
+      return response.badRequest({ error: error.message })
+    }
+  }
+
+  /**
    * Actualizar una unidad residencial
    */
   public async update({ params, request, response, auth }: HttpContext) {

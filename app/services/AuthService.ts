@@ -4,6 +4,7 @@ import Hash from '@adonisjs/core/services/hash'
 import jwt from 'jsonwebtoken'
 import mail from '@adonisjs/mail/services/main'
 import admin from 'firebase-admin'
+import Company from '#models/Company'
 
 // Inicializa Firebase Admin si no está inicializado
 if (!admin.apps.length) {
@@ -78,7 +79,9 @@ export default class AuthService {
             roles: roles,
             permissions: permissions
         }
-    }    public async login(identifier: string, password: string) {
+    }   
+    
+    public async login(identifier: string, password: string) {
         const user = await this.getUserWithRolesAndPermissions(identifier)
 
         if (!user) {
@@ -92,14 +95,24 @@ export default class AuthService {
 
         if (!user.isActive) {
             return { status: 'inactive', message: 'La cuenta aún no está activada. Por favor, revise su correo para activarla.' }
-        }        // Generar token JWT con roles y permisos
+        }
+
+        // Buscar la empresa asociada al usuario por email
+        const company = await Company.query().where('email', user.email).first()
+        let profileStatus: 'complete' | 'incomplete' | undefined = undefined
+        if (company) {
+            profileStatus = this.isCompanyProfileComplete(company) ? 'complete' : 'incomplete'
+        }
+
+        // Generar token JWT con roles y permisos
         const payload = this.generateJWTPayload(user)
         const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1d' })
 
         return { 
             status: 'success', 
             message: 'Login exitoso', 
-            token
+            token,
+            ...(profileStatus !== undefined ? { profileStatus } : {})
         }
     }
 
@@ -182,7 +195,9 @@ export default class AuthService {
         await user.save()
 
         return { status: 'success', message: 'Tu contraseña ha sido actualizada, ahora puedes iniciar sesión' }
-    }    public async loginWithGoogle(idToken: string) {
+    }   
+    
+    public async loginWithGoogle(idToken: string) {
         let decodedToken;
         try {
             decodedToken = await admin.auth().verifyIdToken(idToken);
@@ -205,14 +220,24 @@ export default class AuthService {
 
         if (!user.isActive) {
             return { status: 'inactive', message: 'La cuenta aún no está activada. Por favor, revise su correo para activarla.' }
-        }        // Genera el JWT de tu app con roles y permisos
+        }
+
+        // Buscar la empresa asociada al usuario por email
+        const company = await Company.query().where('email', user.email).first()
+        let profileStatus = 'incomplete'
+        if (company && await this.isCompanyProfileComplete(company)) {
+            profileStatus = 'complete'
+        }
+
+        // Genera el JWT de tu app con roles y permisos
         const payload = this.generateJWTPayload(user)
         const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '1d' })
 
         return { 
             status: 'success', 
             message: 'Login exitoso', 
-            token
+            token,
+            profileStatus
         }
     }
 
@@ -245,7 +270,8 @@ export default class AuthService {
             username: user.firstName,
             displayName: `${user.firstName} ${user.lastName || ''}`.trim(), 
             roles: payload.roles,
-            permissions: payload.permissions
+            permissions: payload.permissions,
+           // companyId: user.companyId // <-- Agregado para exponer empresa_id
         }
     }
 
@@ -269,6 +295,25 @@ export default class AuthService {
             message: 'Token refrescado exitosamente',
             token
         }
+    }
+
+    /**
+     * Verifica si el perfil de la empresa está completo
+     */
+    private isCompanyProfileComplete(company: any): boolean {
+        const requiredFields = [
+            'documentTypeId',
+            'document',
+            'name',
+            'address',
+            'phone',
+            'email',
+            'companyTypeId',
+            'countryId',
+            'stateId',
+            'cityId',
+        ];
+        return requiredFields.every((field) => !!company[field]);
     }
 
 }

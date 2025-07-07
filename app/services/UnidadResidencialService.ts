@@ -125,6 +125,36 @@ export default class UnidadResidencialService {
   }
 
   /**
+   * Obtener todas las unidades residenciales de la empresa del usuario (sin paginación)
+   */
+  public async getAllByCompany(userEmail: string, options?: {
+    search?: string
+  }) {
+    const company = await this.getCompanyByUserEmail(userEmail)
+    const { search } = options || {}
+
+    const query = UnidadResidencial
+      .query()
+      .where('empresa_id', company.id)
+      .preload('documentType', (query) => {
+        query.preload('baseType')
+      })
+      .preload('company')
+
+    if (search) {
+      query.where((builder) => {
+        builder
+          .whereILike('nombre', `%${search}%`)
+          .orWhereILike('documento', `%${search}%`)
+          .orWhereILike('direccion', `%${search}%`)
+          .orWhereILike('ciudad', `%${search}%`)
+      })
+    }
+
+    return await query
+  }
+
+  /**
    * Actualizar una unidad residencial
    */
   public async update(id: string, userEmail: string, updateData: {

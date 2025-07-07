@@ -14,6 +14,9 @@ router.group(() => {
   // Listar unidades residenciales de la empresa
   router.get('/', [UnidadResidencialController, 'index'])
   
+  // Listar todas las unidades residenciales de la empresa (sin paginación)
+  router.get('/all', [UnidadResidencialController, 'all'])
+
   // Obtener unidad residencial por ID
   router.get('/:id', [UnidadResidencialController, 'show'])
   

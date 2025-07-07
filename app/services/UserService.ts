@@ -133,4 +133,236 @@ public async registerCompanyAndUser(data: {
       return { user, company }
     })
   }
+
+//vamos a obtener los usuarios y el tipo de rol de una empresa 
+// Obtener la empresa asociada al usuario por su email
+  public async getCompanyByUserEmail(userEmail: string) {
+    const company = await Company.query().where('email', userEmail).first()
+    if (!company) {
+      throw new Error('No se encontró una empresa asociada a este usuario')
+    }
+    return company
+  }
+
+  // Obtener todos los usuarios de una empresa junto con sus roles
+  public async getUsersWithRolesByCompanyId(companyId: string) {
+    const users = await User.query()
+      .whereIn('id', (builder) => {
+        builder.select('usuario_id').from('cf_usuario_empresa').where('empresa_id', companyId)
+      })
+      .preload('roles', (roleQuery) => {
+        roleQuery.where('estado', true)
+      })
+    return users.map((user) => ({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      username: user.username,
+      phone: user.phone,
+      isActive: user.isActive,
+      roles: user.roles.map((role) => ({
+        id: role.id,
+        name: role.name,
+        description: role.description
+      }))
+    }))
+  }
+
+  // Crear un usuario para la empresa
+  public async createUserForCompany(companyId: string, data: any, unidades: string[] = []) {
+    // Validar que la empresa exista antes de la transacción
+    const empresaExiste = await db.from('am_empresas').where('id', companyId).first()
+    if (!empresaExiste) {
+      throw new Error('La empresa especificada no existe')
+    }
+    return await db.transaction(async (trx) => {
+      // Validar que el email no esté en uso en la empresa (usando la tabla pivote)
+      const existing = await db
+        .from('cf_usuarios as u')
+        .join('cf_usuario_empresa as ue', 'u.id', 'ue.usuario_id')
+        .where('ue.empresa_id', companyId)
+        .andWhere('u.correo', data.email)
+        .first()
+      if (existing) {
+        throw new Error('El correo ya está registrado en la empresa')
+      }
+
+      // Crear usuario
+      const user = new User()
+      user.useTransaction(trx)
+      user.firstName = data.firstName
+      user.lastName = data.lastName
+      user.email = data.email
+      user.username = data.username || data.email // Si no viene username, usa el correo
+      user.phone = data.phone // Guardar teléfono
+      user.password = await Hash.make(data.password)
+      user.isActive = true
+      await user.save()
+
+      // Relacionar usuario con empresa en la tabla pivote
+      await trx.table('cf_usuario_empresa').insert({
+        usuario_id: user.id,
+        empresa_id: companyId,
+        created_at: DateTime.now().toSQL(),
+      })
+
+      // Asignar rol si se provee
+      if (data.roleId) {
+        await trx.table('cf_usuario_rol').insert({
+          usuario_id: user.id,
+          rol_id: data.roleId,
+          asignado_en: DateTime.now().toSQL(),
+          created_at: DateTime.now().toSQL(),
+          updated_at: DateTime.now().toSQL(),
+        })
+      }
+
+      // Asociar usuario a las unidades residenciales (tabla pivote)
+      for (const unidadId of unidades) {
+        await trx.table('cf_usuario_unidad_residencial').insert({
+          usuario_id: user.id,
+          unidad_residencial_id: unidadId,
+          created_at: DateTime.now().toSQL(),
+        })
+      }
+
+      // Enviar correo de bienvenida al usuario
+      await mail.send((message) => {
+        message
+          .to(user.email)
+          .subject('Bienvenido a AppMon')
+          .html(`
+            <div style="text-align: center;">
+              <img src="https://jsgunttlrrdtnqmvrngh.supabase.co/storage/v1/object/public/site_assets/icons/1743045465653_AppMon_Icon_2.png" alt="AppMon Logo" style="width: 120px; margin-bottom: 24px;" />
+              <h2>¡Bienvenido, ${user.firstName}!</h2>
+              <p>Tu cuenta ha sido creada exitosamente.</p>
+              <p>
+                ${data.password
+                  ? `Tus credenciales iniciales son:<br>
+                    Usuario: <b>${user.username}</b><br>
+                    Contraseña: <b>${data.password}</b>`
+                  : 'Por favor, sigue las instrucciones para establecer tu contraseña.'}
+              </p>
+              <p>Si tienes dudas, contacta al administrador de tu empresa.</p>
+            </div>
+          `)
+      })
+
+      return user
+    })
+  }
+
+  // Actualizar un usuario de la empresa (corrige búsqueda por tabla pivote)
+  public async updateUserForCompany(companyId: string, userId: string, data: any, unidades: string[] = []) {
+    return await db.transaction(async (trx) => {
+      // Buscar usuario y verificar que pertenezca a la empresa usando la tabla pivote
+      const usuarioEmpresa = await trx
+        .from('cf_usuario_empresa')
+        .where('empresa_id', companyId)
+        .andWhere('usuario_id', userId)
+        .first()
+      if (!usuarioEmpresa) {
+        throw new Error('Usuario no encontrado en la empresa')
+      }
+      // Buscar usuario
+      const user = await User.find(userId)
+      if (!user) {
+        throw new Error('Usuario no encontrado')
+      }
+
+      // Si se quiere cambiar el email, verificar que no exista en la empresa (excepto el propio)
+      if (data.email && data.email !== user.email) {
+        const existing = await trx
+          .from('cf_usuarios as u')
+          .join('cf_usuario_empresa as ue', 'u.id', 'ue.usuario_id')
+          .where('ue.empresa_id', companyId)
+          .andWhere('u.correo', data.email)
+          .andWhereNot('u.id', user.id)
+          .first()
+        if (existing) {
+          throw new Error('El correo ya está registrado en la empresa')
+        }
+      }
+
+      // Actualizar campos básicos
+      if (data.firstName !== undefined) user.firstName = data.firstName
+      if (data.lastName !== undefined) user.lastName = data.lastName
+      if (data.email !== undefined) user.email = data.email
+      if (data.username !== undefined) user.username = data.username
+      if (data.phone !== undefined) user.phone = data.phone
+      if (data.isActive !== undefined) user.isActive = data.isActive
+      // Actualizar contraseña si se envía
+      if (data.password) user.password = await Hash.make(data.password)
+      await user.useTransaction(trx).save()
+
+      // Actualizar rol si se envía
+      if (data.roleId) {
+        await user.related('roles').sync([data.roleId])
+      }
+
+      // Actualizar unidades residenciales si se envía el arreglo
+      if (Array.isArray(unidades)) {
+        // Eliminar relaciones actuales
+        await trx.from('cf_usuario_unidad_residencial').where('usuario_id', user.id).delete()
+        // Insertar nuevas relaciones
+        for (const unidadId of unidades) {
+          await trx.table('cf_usuario_unidad_residencial').insert({
+            usuario_id: user.id,
+            unidad_residencial_id: unidadId,
+            created_at: DateTime.now().toSQL(),
+          })
+        }
+      }
+      return user
+    })
+  }
+
+  // Eliminar un usuario de la empresa
+  public async deleteUserForCompany(companyId: string, userId: string) {
+    const user = await User.query().where('empresa_id', companyId).andWhere('id', userId).first()
+    if (!user) {
+      throw new Error('Usuario no encontrado en la empresa')
+    }
+    await user.related('roles').detach()
+    await user.delete()
+  }
+
+  // Obtener usuario por UUID con unidad residencial, rol y tipo de rol
+  public async getUserDetailById(userId: string) {
+    // Buscar usuario
+    const user = await User.query()
+      .where('id', userId)
+      .preload('roles', (roleQuery) => {
+        roleQuery.preload('tipoRol')
+      })
+      .first()
+    if (!user) {
+      throw new Error('Usuario no encontrado')
+    }
+
+    // Buscar unidades residenciales asociadas (puede haber varias)
+    const unidades = await db
+      .from('cf_usuario_unidad_residencial as uur')
+      .join('am_unidad_residencial as ur', 'uur.unidad_residencial_id', 'ur.id')
+      .select('ur.*')
+      .where('uur.usuario_id', userId)
+
+    return {
+      ...user.serialize(),
+      unidadesResidenciales: unidades,
+      roles: user.roles.map((role) => ({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+        tipoRol: role.tipoRol ? {
+          id: role.tipoRol.id,
+          nombre: role.tipoRol.nombre,
+        } : null,
+      })),
+    }
+  }
+
+  
+  
 }

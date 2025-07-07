@@ -33,6 +33,9 @@ export default class User extends BaseModel {
   @column.dateTime({ columnName: 'updated_at' })
   public updatedAt!: DateTime
 
+  @column({ columnName: 'telefono' })
+  public phone!: string
+
   // Relación many-to-many con roles
   @manyToMany(() => Role, {
     pivotTable: 'cf_usuario_rol',

@@ -22,5 +22,8 @@ import './routes/locations.ts'
 import './routes/account.ts'
 import './routes/companies.ts'
 import './routes/unidades-residenciales.ts'
+import './routes/user.ts'
+import './routes/roles.ts'
+import './routes/torres-bloques.ts'
 
 
