@@ -2,7 +2,7 @@ import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany, belongsTo } from '@adonisjs/lucid/orm'
 import type { HasMany, BelongsTo } from '@adonisjs/lucid/types/relations'
 import Permission from './Permission.js'
-import TipoRol from './TipoRol.js'
+import BusinessType from './BusinessType.js'
 
 export default class Role extends BaseModel {
   public static table = 'cf_roles'
@@ -19,8 +19,8 @@ export default class Role extends BaseModel {
   @column({ columnName: 'estado' })
   public isActive!: boolean
 
-  @column({ columnName: 'tipo_rol_id' })
-  public tipo_rol_id?: number | null
+  @column({ columnName: 'tipo_negocio_id' })
+  public tipoNegocioId?: number | null
 
   @column.dateTime({ columnName: 'created_at' })
   public createdAt!: DateTime
@@ -34,9 +34,9 @@ export default class Role extends BaseModel {
   })
   public permissions!: HasMany<typeof Permission>
 
-  // Relación con TipoRol
-  @belongsTo(() => TipoRol, {
-    foreignKey: 'tipo_rol_id',
+  // Relación con BusinessType
+  @belongsTo(() => BusinessType, {
+    foreignKey: 'tipoNegocioId',
   })
-  public tipoRol!: BelongsTo<typeof TipoRol>
+  public businessType!: BelongsTo<typeof BusinessType>
 }

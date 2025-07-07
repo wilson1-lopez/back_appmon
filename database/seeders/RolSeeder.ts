@@ -6,26 +6,31 @@ export default class extends BaseSeeder {
   async run() {
     const { default: Role } = await import('#models/Role')
 
-    // Crear tipos de rol
-    const [empresaId] = await db.table('cf_tipo_rol').insert({ nombre: 'Empresa', created_at: db.raw('CURRENT_TIMESTAMP'), updated_at: db.raw('CURRENT_TIMESTAMP') }).returning('id')
-    const [unidadId] = await db.table('cf_tipo_rol').insert({ nombre: 'Unidad Residencial', created_at: db.raw('CURRENT_TIMESTAMP'), updated_at: db.raw('CURRENT_TIMESTAMP') }).returning('id')
+    // Obtener tipos de negocio existentes
+    const empresaType = await db.from('am_tipos_negocio').where('codigo', 'EMPRESA').first()
+    const residencialType = await db.from('am_tipos_negocio').where('codigo', 'RESIDENCIAL').first()
+
+    if (!empresaType || !residencialType) {
+      console.log('Tipos de negocio no encontrados. Asegúrate de ejecutar primero el seeder de tipos de negocio.')
+      return
+    }
 
     // Roles de empresa
     await Role.createMany([
       {
         name: 'Administrador',
         description: 'Acceso total al sistema',
-        tipo_rol_id: empresaId.id || empresaId // compatibilidad con distintos drivers
+        tipoNegocioId: empresaType.id
       },
       {
         name: 'Asistente',
         description: 'Soporte administrativo',
-        tipo_rol_id: empresaId.id || empresaId
+        tipoNegocioId: empresaType.id
       },
       {
         name: 'Supervisor',
         description: 'Acceso limitado con permisos de gestión',
-        tipo_rol_id: empresaId.id || empresaId
+        tipoNegocioId: empresaType.id
       }
     ])
 
@@ -34,22 +39,22 @@ export default class extends BaseSeeder {
       {
         name: 'Vigilante',
         description: 'Control de acceso y seguridad',
-        tipo_rol_id: unidadId.id || unidadId
+        tipoNegocioId: residencialType.id
       },
       {
         name: 'Residente',
         description: 'Residente de la unidad',
-        tipo_rol_id: unidadId.id || unidadId
+        tipoNegocioId: residencialType.id
       },
       {
         name: 'Propietario',
         description: 'Propietario de la unidad',
-        tipo_rol_id: unidadId.id || unidadId
+        tipoNegocioId: residencialType.id
       },
       {
         name: 'Consejo',
         description: 'Miembro del consejo de administración',
-        tipo_rol_id: unidadId.id || unidadId
+        tipoNegocioId: residencialType.id
       }
     ])
   }

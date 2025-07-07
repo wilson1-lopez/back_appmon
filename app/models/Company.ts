@@ -2,7 +2,6 @@ import { DateTime } from 'luxon'
 import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import DocumentType from './DocumentType.js'
-import CompanyType from './CompanyType.js'
 import Country from './Country.js'
 import Department from './Department.js'
 import City from './City.js'
@@ -34,8 +33,8 @@ export default class Company extends BaseModel {
   @column({ columnName: 'correo' })
   public email!: string
 
-  @column({ columnName: 'tipo_compania_id' })
-  public companyTypeId!: number
+  @column({ columnName: 'tipo_compania' })
+  public companyType!: string
 
   @column({ columnName: 'estado' })
   public status!: string
@@ -61,11 +60,6 @@ export default class Company extends BaseModel {
     foreignKey: 'documentTypeId',
   })
   public documentType!: BelongsTo<typeof DocumentType>
-
-  @belongsTo(() => CompanyType, {
-    foreignKey: 'companyTypeId',
-  })
-  public companyType!: BelongsTo<typeof CompanyType>
 
   @belongsTo(() => Country, {
     foreignKey: 'countryId',

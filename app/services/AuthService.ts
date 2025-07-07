@@ -308,7 +308,7 @@ export default class AuthService {
             'address',
             'phone',
             'email',
-            'companyTypeId',
+            'companyType',
             'countryId',
             'stateId',
             'cityId',

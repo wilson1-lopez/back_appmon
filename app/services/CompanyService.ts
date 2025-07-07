@@ -183,7 +183,6 @@ public async resendActivationByToken(token: string) {
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
-      .preload('companyType')
       .preload('country')
       .preload('department')
       .preload('city')
@@ -202,7 +201,6 @@ public async resendActivationByToken(token: string) {
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
-      .preload('companyType')
       .preload('country')
       .preload('department')
       .preload('city')
@@ -226,7 +224,6 @@ public async resendActivationByToken(token: string) {
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
-      .preload('companyType')
       .preload('country')
       .preload('department')
       .preload('city')

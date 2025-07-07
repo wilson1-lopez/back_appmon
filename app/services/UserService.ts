@@ -76,7 +76,7 @@ public async registerCompanyAndUser(data: {
       company.email = data.email
       company.address = ''
       company.phone = ''
-      company.companyTypeId = 1
+      company.companyType = 'Administrador'
       await company.save()
 
       // 3. Asociar usuario al rol de administrador (ajusta el rol_id según corresponda)
@@ -334,7 +334,7 @@ public async registerCompanyAndUser(data: {
     const user = await User.query()
       .where('id', userId)
       .preload('roles', (roleQuery) => {
-        roleQuery.preload('tipoRol')
+        roleQuery.preload('businessType')
       })
       .first()
     if (!user) {
@@ -355,9 +355,10 @@ public async registerCompanyAndUser(data: {
         id: role.id,
         name: role.name,
         description: role.description,
-        tipoRol: role.tipoRol ? {
-          id: role.tipoRol.id,
-          nombre: role.tipoRol.nombre,
+        businessType: role.businessType ? {
+          id: role.businessType.id,
+          name: role.businessType.name,
+          code: role.businessType.code,
         } : null,
       })),
     }
