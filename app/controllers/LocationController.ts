@@ -134,4 +134,66 @@ export default class LocationController {
       })
     }
   }
+
+  /**
+   * Obtener todos los tipos de documentos base
+   */
+  public async getBaseDocumentTypes({ response }: HttpContext) {
+    try {
+      const baseTypes = await this.service.getAllBaseDocumentTypes()
+      return response.ok({
+        success: true,
+        data: baseTypes,
+        message: 'Tipos de documentos base obtenidos exitosamente'
+      })
+    } catch (error) {
+      return response.internalServerError({
+        success: false,
+        message: 'Error al obtener los tipos de documentos base',
+        error: error.message
+      })
+    }
+  }
+
+  /**
+   * Obtener tipos de documentos por país
+   */
+  public async getDocumentTypesByCountry({ params, response }: HttpContext) {
+    try {
+      const { countryId } = params
+      const documentTypes = await this.service.getDocumentTypesByCountry(parseInt(countryId))
+      
+      return response.ok({
+        success: true,
+        data: documentTypes,
+        message: 'Tipos de documentos por país obtenidos exitosamente'
+      })
+    } catch (error) {
+      return response.internalServerError({
+        success: false,
+        message: 'Error al obtener los tipos de documentos por país',
+        error: error.message
+      })
+    }
+  }
+
+  /**
+   * Obtener todos los tipos de documentos con información completa
+   */
+  public async getAllDocumentTypes({ response }: HttpContext) {
+    try {
+      const documentTypes = await this.service.getAllDocumentTypes()
+      return response.ok({
+        success: true,
+        data: documentTypes,
+        message: 'Todos los tipos de documentos obtenidos exitosamente'
+      })
+    } catch (error) {
+      return response.internalServerError({
+        success: false,
+        message: 'Error al obtener todos los tipos de documentos',
+        error: error.message
+      })
+    }
+  }
 }

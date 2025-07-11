@@ -1,6 +1,8 @@
 import Country from '#models/Country'
 import Department from '#models/Department'
 import City from '#models/City'
+import BaseDocumentType from '#models/BaseDocumentType'
+import DocumentType from '#models/DocumentType'
 
 export default class LocationService {
   
@@ -84,5 +86,71 @@ export default class LocationService {
     }
 
     return country
+  }
+
+  /**
+   * Obtener todos los tipos de documentos base
+   */
+  public async getAllBaseDocumentTypes() {
+    return await BaseDocumentType.query()
+      .where('status', true)
+      .orderBy('name', 'asc')
+  }
+
+  /**
+   * Obtener tipos de documentos por país
+   */
+  public async getDocumentTypesByCountry(countryId: number) {
+    const country = await Country.find(countryId)
+    if (!country) {
+      return null
+    }
+
+    const documentTypes = await DocumentType.query()
+      .where('countryId', countryId)
+      .where('status', true)
+      .preload('baseType')
+      .orderBy('id', 'asc')
+
+    return {
+      country: {
+        id: country.id,
+        name: country.name,
+      },
+      documentTypes: documentTypes.map(dt => ({
+        id: dt.id,
+        baseTypeId: dt.baseTypeId,
+        countryId: dt.countryId,
+        status: dt.status,
+        baseType: {
+          id: dt.baseType.id,
+          code: dt.baseType.code,
+          name: dt.baseType.name,
+        }
+      }))
+    }
+  }
+
+  /**
+   * Obtener todos los tipos de documentos con información completa
+   */
+  public async getAllDocumentTypes() {
+    const documentTypes = await DocumentType.query()
+      .where('status', true)
+      .preload('baseType')
+      .orderBy('countryId', 'asc')
+      .orderBy('baseTypeId', 'asc')
+
+    return documentTypes.map(dt => ({
+      id: dt.id,
+      baseTypeId: dt.baseTypeId,
+      countryId: dt.countryId,
+      status: dt.status,
+      baseType: {
+        id: dt.baseType.id,
+        code: dt.baseType.code,
+        name: dt.baseType.name,
+      }
+    }))
   }
 }

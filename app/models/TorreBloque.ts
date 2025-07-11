@@ -1,7 +1,8 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
-import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
+import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
 import UnidadResidencial from './UnidadResidencial.js'
+import Apto from './Apto.js'
 
 export default class TorreBloque extends BaseModel {
   public static table = 'am_torre_bloque'
@@ -31,4 +32,9 @@ export default class TorreBloque extends BaseModel {
     foreignKey: 'unidadId',
   })
   public unidadResidencial!: BelongsTo<typeof UnidadResidencial>
+
+  @hasMany(() => Apto, {
+    foreignKey: 'torreBloqueId',
+  })
+  public apartamentos!: HasMany<typeof Apto>
 }

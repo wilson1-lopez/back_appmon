@@ -14,4 +14,13 @@ router.group(() => {
   
   // Obtener jerarquía completa de un país (país -> departamentos -> ciudades)
   router.get('/countries/:countryId/hierarchy', [LocationController, 'getCompleteHierarchy'])
+  
+  // Obtener todos los tipos de documentos base
+  router.get('/document-types/base', [LocationController, 'getBaseDocumentTypes'])
+  
+  // Obtener tipos de documentos por país
+  router.get('/countries/:countryId/document-types', [LocationController, 'getDocumentTypesByCountry'])
+  
+  // Obtener todos los tipos de documentos con información completa
+  router.get('/document-types', [LocationController, 'getAllDocumentTypes'])
 }).prefix('/api/locations')
