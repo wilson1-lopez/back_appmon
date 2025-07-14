@@ -118,7 +118,11 @@ export default class PropietarioController {
     try {
       const { id } = params
       const data = await request.validateUsing(updatePropietarioValidator)
-      const propietario = await this.propietarioService.updatePropietario(id, data)
+      const fotoFile = request.file('foto', {
+        size: '5mb',
+        extnames: ['jpg', 'jpeg', 'png', 'webp']
+      })
+      const propietario = await this.propietarioService.updatePropietario(id, data, fotoFile || undefined)
 
       return response.json({
         success: true,

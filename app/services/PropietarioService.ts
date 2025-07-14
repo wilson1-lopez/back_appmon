@@ -185,8 +185,14 @@ export default class PropietarioService {
     const propietarios = await db
       .from('am_personas')
       .join('am_propietarios_x_apto', 'am_personas.id', 'am_propietarios_x_apto.propietario_id')
+      .join('am_tipos_documento', 'am_personas.tipo_documento_id', 'am_tipos_documento.id')
+      .join('am_tipos_documento_base', 'am_tipos_documento.tipo_base_id', 'am_tipos_documento_base.id')
       .where('am_propietarios_x_apto.apartamento_id', apartamentoId)
-      .select('am_personas.*', 'am_propietarios_x_apto.es_residente')
+      .select(
+        'am_personas.*',
+        'am_propietarios_x_apto.es_residente',
+        'am_tipos_documento_base.nombre as tipo_documento_nombre'
+      )
 
     return propietarios
   }
@@ -216,18 +222,118 @@ export default class PropietarioService {
       fotoUrl?: string | null
       generoId?: number | null
       unidadResidencialId?: string | null
-    }
+      esResidente?: boolean
+      apartamentoId?: string // necesario para la relación pivote
+    },
+    fotoFile?: MultipartFile
   ) {
     const propietario = await Persona.findOrFail(id)
-    propietario.merge(data)
+    let dataToUpdate = { ...data }
+    // Eliminar campos que no pertenecen al modelo Persona
+    delete dataToUpdate.esResidente
+    delete dataToUpdate.apartamentoId
+    const correoNuevo = typeof data.correo === 'string' ? data.correo.trim().toLowerCase() : null
+    const correoActual = typeof propietario.correo === 'string' ? propietario.correo.trim().toLowerCase() : null
+    if (
+      correoNuevo === '' ||
+      (correoNuevo !== null && correoActual !== null && correoNuevo === correoActual)
+    ) {
+      delete dataToUpdate.correo
+    }
+
+    // Manejar actualización de foto con archivo
+    if (fotoFile && fotoFile.isValid) {
+      const uploadsDir = join(app.makePath('public'), 'uploads', 'fotos')
+      if (!existsSync(uploadsDir)) {
+        await mkdir(uploadsDir, { recursive: true })
+      }
+      // Eliminar foto anterior si existe
+      if (propietario.fotoUrl) {
+        try {
+          const oldFileName = propietario.fotoUrl.split('/').pop()
+          if (oldFileName) {
+            const oldFilePath = join(uploadsDir, oldFileName)
+            if (existsSync(oldFilePath)) {
+              await unlink(oldFilePath)
+            }
+          }
+        } catch (error) {
+          console.warn('Error al eliminar foto anterior:', error)
+        }
+      }
+      // Guardar nueva foto
+      const fileExtension = fotoFile.extname
+      const fileName = `${propietario.id}_${cuid()}.${fileExtension}`
+      await fotoFile.move(uploadsDir, { name: fileName })
+      const fotoUrl = `/uploads/fotos/${fileName}`
+      dataToUpdate.fotoUrl = fotoUrl
+    }
+
+    // Actualizar datos básicos
+    propietario.merge(dataToUpdate)
     await propietario.save()
-    
+
+    // Lógica de residente/propietario en tablas pivote
+    // Solo si se provee apartamentoId y esResidente
+    if (data.apartamentoId && typeof data.esResidente === 'boolean') {
+      const trx = await db.transaction()
+      try {
+        // Verificar si existe la relación en propietarios_x_apto
+        const existePropietario = await trx
+          .from('am_propietarios_x_apto')
+          .where('propietario_id', id)
+          .where('apartamento_id', data.apartamentoId)
+          .first()
+
+        if (existePropietario) {
+          // Actualizar el campo es_residente en la tabla de propietarios
+          await trx
+            .from('am_propietarios_x_apto')
+            .where('propietario_id', id)
+            .where('apartamento_id', data.apartamentoId)
+            .update({ es_residente: data.esResidente })
+        }
+
+        // Lógica para la tabla de residentes_x_apto
+        const existeResidente = await trx
+          .from('am_residentes_x_apto')
+          .where('residente_id', id)
+          .where('apartamento_id', data.apartamentoId)
+          .first()
+
+        if (data.esResidente) {
+          // Si no existe en residentes, agregarlo
+          if (!existeResidente) {
+            await trx
+              .table('am_residentes_x_apto')
+              .insert({
+                apartamento_id: data.apartamentoId,
+                residente_id: id,
+                created_at: new Date(),
+                updated_at: new Date()
+              })
+          }
+        } else {
+          // Si existe en residentes y ya no es residente, eliminarlo
+          if (existeResidente) {
+            await trx
+              .from('am_residentes_x_apto')
+              .where('residente_id', id)
+              .where('apartamento_id', data.apartamentoId)
+              .delete()
+          }
+        }
+        await trx.commit()
+      } catch (error) {
+        await trx.rollback()
+        throw error
+      }
+    }
+
     await propietario.load('apartamentos')
     await propietario.load('unidadResidencial')
-    
     return propietario
   }
-
   /**
    * Eliminar un propietario y todas sus asociaciones
    */

@@ -27,5 +27,7 @@ export const updatePropietarioValidator = vine.compile(
     fotoUrl: vine.string().trim().optional().nullable(),
     generoId: vine.number().positive().optional().nullable(),
     unidadResidencialId: vine.string().uuid().optional().nullable(),
+    esResidente: vine.boolean().optional(), // Se guarda en la tabla pivote
+    apartamentoId: vine.string().uuid().optional(),
   })
 )

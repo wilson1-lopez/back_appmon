@@ -155,8 +155,13 @@ export default class ResidenteService {
     const residentes = await db
       .from('am_personas')
       .join('am_residentes_x_apto', 'am_personas.id', 'am_residentes_x_apto.residente_id')
+      .join('am_tipos_documento', 'am_personas.tipo_documento_id', 'am_tipos_documento.id')
+      .join('am_tipos_documento_base', 'am_tipos_documento.tipo_base_id', 'am_tipos_documento_base.id')
       .where('am_residentes_x_apto.apartamento_id', apartamentoId)
-      .select('am_personas.*')
+      .select(
+        'am_personas.*',
+        'am_tipos_documento_base.nombre as tipo_documento_nombre'
+      )
 
     return residentes
   }
@@ -302,8 +307,11 @@ export default class ResidenteService {
       // Desasociar de todos los apartamentos como residente
       await residente.related('apartamentos').detach([], trx)
 
-      // Si no es propietario, eliminarlo completamente
-      if (!esPropietario) {
+      if (esPropietario) {
+        // Si es propietario, actualizar es_residente a false en am_propietarios_x_apto
+        await db.from('am_propietarios_x_apto').where('propietario_id', id).update({ es_residente: false }).useTransaction(trx)
+      } else {
+        // Si no es propietario, eliminarlo completamente
         await residente.useTransaction(trx).delete()
       }
 
@@ -312,7 +320,7 @@ export default class ResidenteService {
       return {
         eliminado: !esPropietario,
         mensaje: esPropietario 
-          ? 'Residente desasociado (mantiene rol de propietario)'
+          ? 'Residente desasociado (mantiene rol de propietario y esResidente=false)'
           : 'Residente eliminado completamente'
       }
     } catch (error) {
