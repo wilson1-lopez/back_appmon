@@ -8,6 +8,8 @@ router.get('/uploads/unidades/:filename', [FileController, 'serveUnidadLogo'])
 
 // Rutas protegidas para gestión de unidades residenciales
 router.group(() => {
+  // Obtener unidades residenciales asociadas a un usuario según su rol
+  router.get('/unidades-por-usuario', [UnidadResidencialController, 'unidadesPorUsuario'])
   // Crear nueva unidad residencial
   router.post('/', [UnidadResidencialController, 'store'])
   

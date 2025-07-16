@@ -6,6 +6,25 @@ export default class UnidadResidencialController {
   private unidadResidencialService = new UnidadResidencialService()
 
   /**
+   * Obtener unidades residenciales asociadas a un usuario según su rol
+   * GET /unidades-por-usuario
+   */
+  public async unidadesPorUsuario({ auth, response }: HttpContext) {
+    try {
+      if (!auth?.user?.id) {
+        return response.unauthorized({ error: 'Usuario no autenticado' })
+      }
+      const unidades = await this.unidadResidencialService.getUnidadesByUsuario(auth.user.id)
+      return response.ok({
+        message: 'Unidades residenciales asociadas obtenidas exitosamente',
+        data: unidades
+      })
+    } catch (error) {
+      return response.badRequest({ error: error.message })
+    }
+  }
+
+  /**
    * Crear una nueva unidad residencial
    */
   public async store({ request, response, auth }: HttpContext) {

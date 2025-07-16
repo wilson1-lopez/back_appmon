@@ -6,8 +6,47 @@ import { mkdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
+import db from '@adonisjs/lucid/services/db'
+import User from '#models/User'
 
 export default class UnidadResidencialService {
+  /**
+   * Obtener unidades residenciales asociadas a un usuario según su rol
+   */
+  public async getUnidadesByUsuario(userId: string) {
+    // Cargar usuario y roles
+    const user = await User.query().where('id', userId).preload('roles').first()
+    if (!user) throw new Error('Usuario no encontrado')
+    const roles = user.roles.map(r => r.name.toLowerCase())
+
+    // Si es vigilante, retorna solo las unidades asociadas
+    if (roles.includes('vigilante')) {
+      const unidades = await db
+        .from('cf_usuario_unidad_residencial as uur')
+        .join('am_unidad_residencial as ur', 'uur.unidad_residencial_id', 'ur.id')
+        .select('ur.*')
+        .where('uur.usuario_id', userId)
+      return unidades
+    }
+    // Si es admin, retorna todas las unidades de la empresa
+    if (roles.includes('administrador')) {
+      // Buscar empresa del usuario (por la primera unidad asociada o por companyId si existe)
+      const empresa = await db
+        .from('cf_usuario_empresa')
+        .where('usuario_id', userId)
+        .first()
+      if (!empresa) return []
+      const unidades = await UnidadResidencial.query().where('empresa_id', empresa.empresa_id)
+      return unidades
+    }
+    // Otros roles: retorna solo las unidades asociadas
+    const unidades = await db
+      .from('cf_usuario_unidad_residencial as uur')
+      .join('am_unidad_residencial as ur', 'uur.unidad_residencial_id', 'ur.id')
+      .select('ur.*')
+      .where('uur.usuario_id', userId)
+    return unidades
+  }
 
   /**
    * Obtener la empresa asociada al usuario por su email
