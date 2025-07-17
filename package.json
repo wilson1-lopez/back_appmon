@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node bin/server.js",
     "build": "node ace build",
+    "build-serve": "node ace build && cp .env build/ && sudo pm2 start build/bin/server.js --name appmon_backend",
+    "build-reset": "node ace build && cp .env build/ && sudo pm2 restart appmon_backend",
     "dev": "node ace serve --hmr",
     "test": "node ace test",
     "lint": "eslint .",
