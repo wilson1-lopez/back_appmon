@@ -76,7 +76,6 @@ export default class CompanyController {
         'address',    // dirección
         'phone',      // teléfono
         'logoUrl',    // logo de la empresa
-        'stateId',    // departamento (ID)
         'cityId'      // ciudad (ID)
       ])
       

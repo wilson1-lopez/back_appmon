@@ -18,6 +18,9 @@ export default class Country extends BaseModel {
   @column({ columnName: 'icono_pais' })
   public countryIcon!: string | null
 
+  @column({ columnName: 'estado' })
+  public status!: boolean
+
   @column.dateTime({ columnName: 'created_at' })
   public createdAt!: DateTime
 

@@ -1,7 +1,7 @@
-import { DateTime } from 'luxon'
-import { BaseModel, column, manyToMany } from '@adonisjs/lucid/orm'
-import type { ManyToMany } from '@adonisjs/lucid/types/relations'
+import { BaseModel, column, manyToMany, hasMany } from '@adonisjs/lucid/orm'
+import type { ManyToMany, HasMany } from '@adonisjs/lucid/types/relations'
 import Role from './Role.js'
+import UsuarioEmpresa from './UsuarioEmpresa.js'
 
 export default class User extends BaseModel {
   public static table = 'cf_usuarios'
@@ -27,22 +27,27 @@ export default class User extends BaseModel {
   @column({ columnName: 'estado' })
   public isActive!: boolean
 
-  @column.dateTime({ columnName: 'created_at' })
-  public createdAt!: DateTime
+  @column({ columnName: 'created_at' })
+  public createdAt!: Date
 
-  @column.dateTime({ columnName: 'updated_at' })
-  public updatedAt!: DateTime
+  @column({ columnName: 'updated_at' })
+  public updatedAt!: Date
 
   @column({ columnName: 'telefono' })
   public phone!: string
 
-  // Relación many-to-many con roles
+  // Relación hasMany con UsuarioEmpresa (empresas donde el usuario está vinculado)
+  @hasMany(() => UsuarioEmpresa, { foreignKey: 'usuarioId' })
+  public empresas!: HasMany<typeof UsuarioEmpresa>
+
   @manyToMany(() => Role, {
-    pivotTable: 'cf_usuario_rol',
-    localKey: 'id',
-    pivotForeignKey: 'usuario_id',
-    relatedKey: 'id',
+    pivotTable: 'cf_usuario_empresa_roles',
+    pivotForeignKey: 'usuario_empresa_id',
     pivotRelatedForeignKey: 'rol_id',
+    pivotColumns: ['activo'],
+    onQuery: (query) => {
+      query.where('cf_usuario_empresa_roles.activo', true)
+    },
   })
   public roles!: ManyToMany<typeof Role>
 }

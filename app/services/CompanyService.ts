@@ -55,8 +55,8 @@ public async activateCompanyAccount(token: string) {
       await user.save();
       updated = true;
     }
-    if (company.status !== 'activa') {
-      company.status = 'activa';
+    if (company.status !== 'activo') {
+      company.status = 'activo';
       await company.save();
       updated = true;
     }
@@ -183,8 +183,8 @@ public async resendActivationByToken(token: string) {
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
-      .preload('country')
-      .preload('department')
+      // .preload('country')
+      // .preload('department')
       .preload('city')
       .first()
 
@@ -201,12 +201,26 @@ public async resendActivationByToken(token: string) {
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
-      .preload('country')
-      .preload('department')
-      .preload('city')
+      .preload('city', (cityQuery) => {
+        cityQuery.preload('department', (deptQuery) => {
+          deptQuery.preload('country')
+        })
+      })
       .first()
 
-    return company
+    if (!company) return null
+
+    // Obtener el nombre del país asociado
+    let countryName: string | null = null
+    if (company.city && company.city.department && company.city.department.country) {
+      countryName = company.city.department.country.name
+    }
+
+    // Retornar la empresa con el nombre del país incluido
+    return {
+      ...company.toJSON(),
+      countryName,
+    }
   }
 
   /**
@@ -224,8 +238,8 @@ public async resendActivationByToken(token: string) {
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
-      .preload('country')
-      .preload('department')
+      // .preload('country')
+      // .preload('department')
       .preload('city')
 
     if (status) {

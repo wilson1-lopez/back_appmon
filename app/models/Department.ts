@@ -19,6 +19,9 @@ export default class Department extends BaseModel {
   @column({ columnName: 'pais_id' })
   public countryId!: number
 
+  @column({ columnName: 'estado' })
+  public status!: boolean
+
   @column.dateTime({ columnName: 'created_at' })
   public createdAt!: DateTime
 

@@ -58,7 +58,7 @@ export default class UnidadResidencialService {
       throw new Error('No se encontró una empresa asociada a este usuario')
     }
 
-    if (company.status !== 'activa') {
+    if (company.status !== 'activo') {
       throw new Error('La empresa no está activa')
     }
 

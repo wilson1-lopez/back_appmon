@@ -18,6 +18,9 @@ export default class City extends BaseModel {
   @column({ columnName: 'departamento_id' })
   public departmentId!: number
 
+  @column({ columnName: 'estado' })
+  public status!: boolean
+
   @column.dateTime({ columnName: 'created_at' })
   public createdAt!: DateTime
 

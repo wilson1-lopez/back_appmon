@@ -68,39 +68,39 @@ public async registerCompanyAndUser(data: {
       // 2. Crear empresa
       const company = new Company()
       company.useTransaction(trx)
-      company.countryId = data.countryId
       company.documentTypeId = data.documentTypeId
       company.document = data.document
       company.name = data.name
-      company.status = 'pendiente de verificación'
+      company.status = 'inactivo'
       company.email = data.email
       company.address = ''
       company.phone = ''
-      company.companyType = 'Administrador'
+      company.companyTypeId = 1 // O el id correspondiente al tipo de compañía por defecto
+      company.countryId = data.countryId
       await company.save()
 
-      // 3. Asociar usuario al rol de administrador (ajusta el rol_id según corresponda)
-      await trx.table('cf_usuario_rol').insert({
+      // 3. Relacionar usuario con empresa (cf_usuario_empresa)
+      const [usuarioEmpresaId] = await trx.table('cf_usuario_empresa').insert({
         usuario_id: user.id,
-        rol_id: 1,
-        asignado_en: DateTime.now().toSQL(),
+        empresa_id: company.id,
         created_at: DateTime.now().toSQL(),
-        updated_at: DateTime.now().toSQL(),
+      }).returning('id')
+
+      // 4. Asignar rol de administrador en contexto empresa (cf_usuario_empresa_roles)
+      await trx.table('cf_usuario_empresa_roles').insert({
+        usuario_empresa_id: usuarioEmpresaId.id || usuarioEmpresaId, // depende del driver
+        rol_id: 2, // Ajusta el rol_id según corresponda
+        asignado_por: user.id, // El mismo usuario se autoasigna
+        activo: true,
       })
 
-      // 3. Crear esquema y asociar (solo inserta en cf_empresas)
-      const schemaName = `empresa_${randomBytes(6).toString('hex')}`
-     await trx.rawQuery('CALL public.cf_registrar_empresa(?, ?)', [
-  company.id,
-  schemaName,
-])
-      
-    const activationPayload = {
-      sub: user.id,
-      email: user.email,
-      type: 'activation',
-    }
-    const token = jwt.sign(activationPayload, this.jwtSecret, { expiresIn: '8h' })
+      // 5. Generar token de activación
+      const activationPayload = {
+        sub: user.id,
+        email: user.email,
+        type: 'activation',
+      }
+      const token = jwt.sign(activationPayload, this.jwtSecret, { expiresIn: '8h' })
 
       // 6. Enviar correo de activación
       const activationUrl = `http://localhost:4200/account-activation?token=${token}`

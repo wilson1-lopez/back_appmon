@@ -20,14 +20,20 @@ export default class AuthService {
      * Helper para obtener usuario con roles y permisos
      */
     private async getUserWithRolesAndPermissions(identifier: string) {
+        // Traer usuario, empresas, roles y permisos (estructura multi-empresa)
         const user = await User.query()
             .where('email', identifier)
             .orWhere('username', identifier)
-            .preload('roles', (roleQuery) => {
-                roleQuery
-                    .where('estado', true) // Solo roles activos
-                    .preload('permissions', (permissionQuery) => {
-                        permissionQuery.preload('feature')
+            .preload('empresas', (empresaQuery) => {
+                empresaQuery.where('estado', true)
+                    .preload('roles', (rolQuery) => {
+                        rolQuery.where('activo', true)
+                            .preload('role', (roleModelQuery) => {
+                                roleModelQuery.where('estado', true)
+                                    .preload('permissions', (permissionQuery) => {
+                                        permissionQuery.preload('feature')
+                                    })
+                            })
                     })
             })
             .first()
@@ -39,41 +45,52 @@ export default class AuthService {
      * Generar payload JWT con roles y permisos
      */
     private generateJWTPayload(user: any) {
-        // Extraer roles
-        const roles = user.roles.map((role: any) => ({
-            id: role.id,
-            name: role.name,
-            description: role.description
-        }))
-
-        // Extraer permisos agrupados por funcionalidad
+        // Extraer roles y permisos de todas las empresas
+        const roles: any[] = []
         const permissions: any = {}
-        user.roles.forEach((role: any) => {
-            role.permissions.forEach((permission: any) => {
-                const featureName = permission.feature.name
-                if (!permissions[featureName]) {
-                    permissions[featureName] = {
-                        featureId: permission.feature.id,
-                        canView: false,
-                        canCreate: false,
-                        canEdit: false,
-                        canDelete: false
-                    }
+
+        if (user.empresas && Array.isArray(user.empresas)) {
+            user.empresas.forEach((empresa: any) => {
+                if (empresa.roles && Array.isArray(empresa.roles)) {
+                    empresa.roles.forEach((usuarioEmpresaRol: any) => {
+                        const role = usuarioEmpresaRol.role
+                        if (role) {
+                            roles.push({
+                                id: role.id,
+                                name: role.name,
+                                description: role.description,
+                                empresaId: empresa.empresaId || empresa.id
+                            })
+                            if (role.permissions && Array.isArray(role.permissions)) {
+                                role.permissions.forEach((permission: any) => {
+                                    const featureName = permission.feature?.name
+                                    if (!featureName) return
+                                    if (!permissions[featureName]) {
+                                        permissions[featureName] = {
+                                            featureId: permission.feature.id,
+                                            canView: false,
+                                            canCreate: false,
+                                            canEdit: false,
+                                            canDelete: false
+                                        }
+                                    }
+                                    permissions[featureName].canView = permissions[featureName].canView || permission.canView
+                                    permissions[featureName].canCreate = permissions[featureName].canCreate || permission.canCreate
+                                    permissions[featureName].canEdit = permissions[featureName].canEdit || permission.canEdit
+                                    permissions[featureName].canDelete = permissions[featureName].canDelete || permission.canDelete
+                                })
+                            }
+                        }
+                    })
                 }
-                
-                // Combinar permisos (OR lógico - si cualquier rol permite algo, el usuario puede hacerlo)
-                permissions[featureName].canView = permissions[featureName].canView || permission.canView
-                permissions[featureName].canCreate = permissions[featureName].canCreate || permission.canCreate
-                permissions[featureName].canEdit = permissions[featureName].canEdit || permission.canEdit
-                permissions[featureName].canDelete = permissions[featureName].canDelete || permission.canDelete
             })
-        })
+        }
 
         return {
             sub: user.id,
             email: user.email,
-            username: user.firstName, 
-            displayName: `${user.firstName} ${user.lastName || ''}`.trim(), 
+            username: user.firstName,
+            displayName: `${user.firstName} ${user.lastName || ''}`.trim(),
             firstName: user.firstName,
             lastName: user.lastName,
             roles: roles,
@@ -308,9 +325,8 @@ export default class AuthService {
             'address',
             'phone',
             'email',
-            'companyType',
+            'companyTypeId',
             'countryId',
-            'stateId',
             'cityId',
         ];
         return requiredFields.every((field) => !!company[field]);
