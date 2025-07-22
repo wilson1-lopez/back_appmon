@@ -11,7 +11,22 @@ export default class ResidenteController {
   async store({ request, response }: HttpContext) {
     try {
       const data = await request.validateUsing(createResidenteValidator)
-      const residente = await this.residenteService.createResidente(data)
+      // Eliminar generoId si es null o undefined para cumplir con el tipo requerido
+      if (data.generoId == null) {
+        delete data.generoId
+      }
+      const residente = await this.residenteService.createResidente(data as {
+        nombre: string
+        apellido: string
+        tipoDocumentoId: number
+        documento?: string | null
+        telefono?: string | null
+        correo?: string | null
+        fotoUrl?: string | null
+        apartamentoId: string
+        generoId?: number
+        unidadResidencialId?: string | null
+      })
 
       return response.status(201).json({
         success: true,
