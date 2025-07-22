@@ -102,8 +102,9 @@ public async registerCompanyAndUser(data: {
       }
       const token = jwt.sign(activationPayload, this.jwtSecret, { expiresIn: '8h' })
 
-      // 6. Enviar correo de activación
-      const activationUrl = `http://localhost:4200/account-activation?token=${token}`
+      // 6. Enviar correo de activación usando FRONTEND_URL
+      const frontendUrl = env.get('FRONTEND_URL')
+      const activationUrl = `${frontendUrl}/account-activation?token=${token}`
       await mail.send((message) => {
         message
           .to(user.email)

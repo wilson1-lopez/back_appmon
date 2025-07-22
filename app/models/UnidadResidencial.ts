@@ -6,6 +6,8 @@ import Company from './Company.js'
 import City from './City.js'
 
 export default class UnidadResidencial extends BaseModel {
+  @column()
+  public estado!: boolean
   public static table = 'am_unidad_residencial'
 
   @column({ isPrimary: true })

@@ -7,61 +7,52 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
 import db from '@adonisjs/lucid/services/db'
-import User from '#models/User'
+//import User from '#models/User'
 
 export default class UnidadResidencialService {
-  /**
-   * Obtener unidades residenciales asociadas a un usuario según su rol
-   */
+  
   public async getUnidadesByUsuario(userId: string) {
-    // Cargar usuario y roles
-    const user = await User.query().where('id', userId).preload('roles').first()
-    if (!user) throw new Error('Usuario no encontrado')
-    const roles = user.roles.map(r => r.name.toLowerCase())
-
-    // Si es vigilante, retorna solo las unidades asociadas
-    if (roles.includes('vigilante')) {
-      const unidades = await db
-        .from('cf_usuario_unidad_residencial as uur')
-        .join('am_unidad_residencial as ur', 'uur.unidad_residencial_id', 'ur.id')
-        .select('ur.*')
-        .where('uur.usuario_id', userId)
-      return unidades
-    }
-    // Si es admin, retorna todas las unidades de la empresa
-    if (roles.includes('administrador')) {
-      // Buscar empresa del usuario (por la primera unidad asociada o por companyId si existe)
-      const empresa = await db
-        .from('cf_usuario_empresa')
-        .where('usuario_id', userId)
-        .first()
-      if (!empresa) return []
-      const unidades = await UnidadResidencial.query().where('empresa_id', empresa.empresa_id)
-      return unidades
-    }
-    // Otros roles: retorna solo las unidades asociadas
+    // Obtener todas las unidades residenciales asociadas al usuario, sin importar el rol
     const unidades = await db
       .from('cf_usuario_unidad_residencial as uur')
       .join('am_unidad_residencial as ur', 'uur.unidad_residencial_id', 'ur.id')
       .select('ur.*')
       .where('uur.usuario_id', userId)
+      .andWhere('uur.estado', true)
     return unidades
   }
 
   /**
    * Obtener la empresa asociada al usuario por su email
    */
+  /**
+   * Obtener la empresa asociada a un usuario (por email de usuario, no de empresa)
+   */
   private async getCompanyByUserEmail(userEmail: string): Promise<Company> {
-    const company = await Company.query().where('email', userEmail).first()
-    
-    if (!company) {
-      throw new Error('No se encontró una empresa asociada a este usuario')
+    // Buscar el usuario global por email
+    const user = await db.from('cf_usuarios').where('correo', userEmail).first()
+    if (!user) {
+      throw new Error('No se encontró un usuario con este correo')
     }
 
+    // Buscar la relación usuario-empresa activa
+    const usuarioEmpresa = await db
+      .from('cf_usuario_empresa')
+      .where('usuario_id', user.id)
+      .andWhere('estado', true)
+      .first()
+    if (!usuarioEmpresa) {
+      throw new Error('El usuario no está asociado a ninguna empresa activa')
+    }
+
+    // Buscar la empresa
+    const company = await Company.query().where('id', usuarioEmpresa.empresa_id).first()
+    if (!company) {
+      throw new Error('No se encontró la empresa asociada al usuario')
+    }
     if (company.status !== 'activo') {
       throw new Error('La empresa no está activa')
     }
-
     return company
   }
 
@@ -192,6 +183,7 @@ export default class UnidadResidencialService {
     const query = UnidadResidencial
       .query()
       .where('empresa_id', company.id)
+      .where('estado', true)
       .preload('documentType', (query) => {
         query.preload('baseType')
       })
@@ -308,27 +300,14 @@ export default class UnidadResidencialService {
       .andWhere('empresa_id', company.id)
       .first()
 
+
     if (!unidadResidencial) {
       throw new Error('Unidad residencial no encontrada o no pertenece a su empresa')
     }
 
-    // Eliminar logo si existe
-    if (unidadResidencial.logoUrl) {
-      try {
-        const fileName = unidadResidencial.logoUrl.split('/').pop()
-        if (fileName) {
-          const uploadsDir = join(app.makePath('public'), 'uploads', 'unidades')
-          const filePath = join(uploadsDir, fileName)
-          if (existsSync(filePath)) {
-            await unlink(filePath)
-          }
-        }
-      } catch (error) {
-        console.warn('Error al eliminar logo de unidad residencial:', error)
-      }
-    }
-
-    await unidadResidencial.delete()
+    // Eliminado lógico: poner estado en false
+    unidadResidencial.estado = false
+    await unidadResidencial.save()
     return { message: 'Unidad residencial eliminada exitosamente' }
   }
 

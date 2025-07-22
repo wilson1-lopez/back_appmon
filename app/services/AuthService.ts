@@ -147,7 +147,9 @@ export default class AuthService {
             { expiresIn: '1h' }
         )
 
-        const resetUrl = `http://localhost:4200/reset-password?token=${token}`
+        // Usar la variable de entorno FRONTEND_URL
+        const frontendUrl = env.get('FRONTEND_URL')
+        const resetUrl = `${frontendUrl}/reset-password?token=${token}`
 
         await mail.send((message) => {
             message

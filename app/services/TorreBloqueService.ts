@@ -23,11 +23,12 @@ export default class TorreBloqueService {
 
   public async delete(id: string) {
     const torre = await TorreBloque.findOrFail(id)
-    await torre.delete()
+    torre.estado = false
+    await torre.save()
     return torre
   }
 
   public async byUnidad(unidadId: string) {
-    return TorreBloque.query().where('unidad_id', unidadId)
+    return TorreBloque.query().where('unidad_id', unidadId).where('estado', true)
   }
 }

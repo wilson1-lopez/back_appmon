@@ -5,6 +5,8 @@ import UnidadResidencial from './UnidadResidencial.js'
 import Apto from './Apto.js'
 
 export default class TorreBloque extends BaseModel {
+  @column()
+  public estado!: boolean
   public static table = 'am_torre_bloque'
 
   @column({ isPrimary: true })

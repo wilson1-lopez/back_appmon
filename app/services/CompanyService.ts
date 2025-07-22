@@ -141,33 +141,34 @@ public async resendActivationByToken(token: string) {
     { expiresIn: '8h' }
   )
 
-  // 6. Enviar correo de activación
-  const activationUrl = `http://localhost:4200/account-activation?token=${newToken}`
+  // 6. Enviar correo de activación usando FRONTEND_URL
+  const frontendUrl = env.get('FRONTEND_URL')
+  const activationUrl = `${frontendUrl}/account-activation?token=${newToken}`
   await mail.send((message) => {
-  message
-    .to(user.email)
-    .subject('Activación de cuenta AppMon')
-    .html(`
-      <div style="text-align: center;">
-        <img src="https://jsgunttlrrdtnqmvrngh.supabase.co/storage/v1/object/public/site_assets/icons/1743045465653_AppMon_Icon_2.png" alt="AppMon Logo" style="width: 120px; margin-bottom: 24px;" />
-        <h2>¡Bienvenido a la plataforma!</h2>
-        <p>Para activar tu cuenta y la empresa <b>${company.name}</b>, haz clic en el siguiente botón:</p>
-        <p>
-          <a href="${activationUrl}" style="
-            display: inline-block;
-            padding: 12px 32px;
-            background-color: #007bff;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: bold;
-          ">Activar cuenta</a>
-        </p>
-        <p>Este enlace es válido por 8 horas.</p>
-      </div>
-    `)
-})
+    message
+      .to(user.email)
+      .subject('Activación de cuenta AppMon')
+      .html(`
+        <div style="text-align: center;">
+          <img src="https://jsgunttlrrdtnqmvrngh.supabase.co/storage/v1/object/public/site_assets/icons/1743045465653_AppMon_Icon_2.png" alt="AppMon Logo" style="width: 120px; margin-bottom: 24px;" />
+          <h2>¡Bienvenido a la plataforma!</h2>
+          <p>Para activar tu cuenta y la empresa <b>${company.name}</b>, haz clic en el siguiente botón:</p>
+          <p>
+            <a href="${activationUrl}" style="
+              display: inline-block;
+              padding: 12px 32px;
+              background-color: #007bff;
+              color: #fff;
+              text-decoration: none;
+              border-radius: 6px;
+              font-size: 16px;
+              font-weight: bold;
+            ">Activar cuenta</a>
+          </p>
+          <p>Este enlace es válido por 8 horas.</p>
+        </div>
+      `)
+  })
 
   return { status: 'resent', message: 'Correo de activación reenviado' }
 }
