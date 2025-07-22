@@ -69,23 +69,65 @@ export default class UnidadResidencialService {
    * Crear una nueva unidad residencial
    */
   public async create(userEmail: string, data: {
-    documentTypeId: number
-    document: string
-    name: string
-    address: string
-    city: string
-    adminPhone: string
-    supportPhone: string
-    contactEmail: string
+    // Se aceptan ambos formatos de nombres (inglés y español)
+    tipoDocumentoId?: number | string
+    documento?: string
+    nombre?: string
+    direccion?: string
+    ciudadId?: number | string
+    telefonoAdministradora?: string
+    telefonoSoporte?: string
+    correoContacto?: string
+    descripcion?: string
+    // Inglés
+    documentTypeId?: number | string
+    document?: string
+    name?: string
+    address?: string
+    city?: number | string
+    adminPhone?: string
+    supportPhone?: string
+    contactEmail?: string
     description?: string
   }) {
+    // ...validación se realiza en el validador, no aquí...
+
+    // Normalizar los datos para aceptar ambos formatos
+    const documentTypeId = data.tipoDocumentoId ?? data.documentTypeId
+    const document = data.documento ?? data.document
+    const name = data.nombre ?? data.name
+    const address = data.direccion ?? data.address
+    const city = data.ciudadId ?? data.city
+    const adminPhone = data.telefonoAdministradora ?? data.adminPhone
+    const supportPhone = data.telefonoSoporte ?? data.supportPhone
+    const contactEmail = data.correoContacto ?? data.contactEmail
+    const description = data.descripcion ?? data.description
+
+    // Convertir a number si vienen como string
+    const documentTypeIdNum = typeof documentTypeId === 'string' ? parseInt(documentTypeId) : documentTypeId
+    const cityNum = typeof city === 'string' ? parseInt(city) : city
+
+    // Validar que los campos requeridos no sean undefined o null
+    if (
+      document == null ||
+      documentTypeIdNum == null ||
+      name == null ||
+      address == null ||
+      cityNum == null ||
+      adminPhone == null ||
+      supportPhone == null ||
+      contactEmail == null
+    ) {
+      throw new Error('Faltan campos obligatorios para crear la unidad residencial')
+    }
+
     // Obtener la empresa del usuario autenticado
     const company = await this.getCompanyByUserEmail(userEmail)
 
     // Verificar que no exista otra unidad con el mismo documento
     const existingUnit = await UnidadResidencial.query()
-      .where('documento', data.document)
-      .andWhere('tipo_documento_id', data.documentTypeId)
+      .where('documento', document)
+      .andWhere('tipo_documento_id', documentTypeIdNum)
       .first()
 
     if (existingUnit) {
@@ -94,18 +136,22 @@ export default class UnidadResidencialService {
 
     // Crear la unidad residencial
     const unidadResidencial = new UnidadResidencial()
-    unidadResidencial.documentTypeId = data.documentTypeId
-    unidadResidencial.document = data.document
-    unidadResidencial.name = data.name
-    unidadResidencial.address = data.address
-    unidadResidencial.city = data.city
-    unidadResidencial.adminPhone = data.adminPhone
-    unidadResidencial.supportPhone = data.supportPhone
-    unidadResidencial.contactEmail = data.contactEmail
-    unidadResidencial.description = data.description
+    unidadResidencial.documentTypeId = documentTypeIdNum
+    unidadResidencial.document = document
+    unidadResidencial.name = name
+    unidadResidencial.address = address
+    unidadResidencial.ciudadId = cityNum
+    unidadResidencial.adminPhone = adminPhone
+    unidadResidencial.supportPhone = supportPhone
+    unidadResidencial.contactEmail = contactEmail
+    unidadResidencial.description = description
     unidadResidencial.companyId = company.id
 
     await unidadResidencial.save()
+
+    // Llamar al procedimiento almacenado para crear el schema privado de la unidad
+    const schemaName = `unidad_${unidadResidencial.id}`
+    await db.rawQuery('CALL cf_crear_schema_unidad(?)', [schemaName])
 
     return await this.getById(unidadResidencial.id)
   }
@@ -121,6 +167,7 @@ export default class UnidadResidencialService {
         query.preload('baseType')
       })
       .preload('company')
+      .preload('city')
 
     // Si se proporciona userEmail, verificar que la unidad pertenezca a la empresa del usuario
     if (userEmail) {
@@ -201,7 +248,7 @@ export default class UnidadResidencialService {
     document?: string
     name?: string
     address?: string
-    city?: string
+    ciudadId?: number 
     adminPhone?: string
     supportPhone?: string
     contactEmail?: string
@@ -231,7 +278,20 @@ export default class UnidadResidencialService {
       }
     }
 
-    unidadResidencial.merge(updateData)
+    // Normalizar y convertir ciudadId
+    let ciudadIdValue = updateData.ciudadId
+    if (ciudadIdValue !== undefined && typeof ciudadIdValue === 'string') {
+      ciudadIdValue = parseInt(ciudadIdValue)
+    }
+    const dataToUpdate: any = { ...updateData }
+    if (ciudadIdValue !== undefined && !isNaN(ciudadIdValue)) {
+      dataToUpdate.ciudadId = ciudadIdValue as number
+    }
+    if (dataToUpdate.ciudadId !== undefined && typeof dataToUpdate.ciudadId !== 'number') {
+      delete dataToUpdate.ciudadId
+    }
+
+    unidadResidencial.merge(dataToUpdate)
     await unidadResidencial.save()
 
     return await this.getById(id)

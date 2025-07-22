@@ -29,13 +29,13 @@ export default class Apto extends BaseModel {
   @column({ columnName: 'area_libre' })
   public areaLibre?: string | null
 
-  @column({ columnName: 'coe_apto' })
+  @column({ columnName: 'coeficiente_apto' })
   public coeApto?: number | null
 
-  @column({ columnName: 'coe_parqueadero' })
+  @column({ columnName: 'coeficiente_parqueadero' })
   public coeParqueadero?: number | null
 
-  @column({ columnName: 'coe_cuarto_util' })
+  @column({ columnName: 'coeficiente_cuarto_util' })
   public coeCuartoUtil?: number | null
 
   @column({ columnName: 'coe_area_libre' })

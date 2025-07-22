@@ -3,7 +3,7 @@ import User from '#models/User'
 import env from '#start/env'
 import Hash from '@adonisjs/core/services/hash'
 import jwt from 'jsonwebtoken'
-import { randomBytes } from 'crypto'
+//import { randomBytes } from 'crypto'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 //import ActivationToken from '#models/ActivationToken'
@@ -146,85 +146,231 @@ public async registerCompanyAndUser(data: {
 
   // Obtener todos los usuarios de una empresa junto con sus roles
   public async getUsersWithRolesByCompanyId(companyId: string) {
-    const users = await User.query()
-      .whereIn('id', (builder) => {
-        builder.select('usuario_id').from('cf_usuario_empresa').where('empresa_id', companyId)
-      })
-      .preload('roles', (roleQuery) => {
-        roleQuery.where('estado', true)
-      })
-    return users.map((user) => ({
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      username: user.username,
-      phone: user.phone,
-      isActive: user.isActive,
-      roles: user.roles.map((role) => ({
-        id: role.id,
-        name: role.name,
-        description: role.description
-      }))
-    }))
+    // Traer usuarios relacionados por empresa y por unidad residencial de la empresa
+    // 1. Usuarios por empresa (solo activos)
+    const empresaRows = await db
+      .from('cf_usuario_empresa as ue')
+      .join('cf_usuarios as u', 'ue.usuario_id', 'u.id')
+      .leftJoin('cf_usuario_empresa_roles as uer', 'ue.id', 'uer.usuario_empresa_id')
+      .leftJoin('cf_roles as r', 'uer.rol_id', 'r.id')
+      .select(
+        'u.id as userId',
+        'u.nombre as firstName',
+        'u.apellido as lastName',
+        'u.correo as email',
+        'u.usuario as username',
+        'u.telefono as phone',
+        'u.estado as isActive',
+        'r.id as roleId',
+        'r.nombre as roleName',
+        'r.descripcion as roleDescription',
+        db.raw('NULL as unidadResidencialId')
+      )
+      .where('ue.empresa_id', companyId)
+      .andWhere('u.estado', true)
+      .orderBy('u.nombre', 'asc');
+
+    // 2. Usuarios por unidad residencial de la empresa (solo activos)
+    // Primero obtener las unidades residenciales de la empresa
+    const unidades = await db.from('am_unidad_residencial').select('id').where('empresa_id', companyId);
+    const unidadIds = unidades.map((u: any) => u.id);
+    let unidadRows: any[] = [];
+    if (unidadIds.length > 0) {
+      unidadRows = await db
+        .from('cf_usuario_unidad_residencial as uur')
+        .join('cf_usuarios as u', 'uur.usuario_id', 'u.id')
+        .leftJoin('cf_usuario_unidad_roles as uurr', 'uur.id', 'uurr.usuario_unidad_id')
+        .leftJoin('cf_roles as r', 'uurr.rol_id', 'r.id')
+        .select(
+          'u.id as userId',
+          'u.nombre as firstName',
+          'u.apellido as lastName',
+          'u.correo as email',
+          'u.usuario as username',
+          'u.telefono as phone',
+          'u.estado as isActive',
+          'r.id as roleId',
+          'r.nombre as roleName',
+          'r.descripcion as roleDescription',
+          'uur.unidad_residencial_id as unidadResidencialId'
+        )
+        .whereIn('uur.unidad_residencial_id', unidadIds)
+        .andWhere('u.estado', true)
+        .orderBy('u.nombre', 'asc');
+    }
+
+    // Unir ambos resultados y agrupar roles por usuario
+    const allRows = [...empresaRows, ...unidadRows];
+    const usersMap: Record<string, any> = {};
+    for (const row of allRows) {
+      if (!usersMap[row.userId]) {
+        usersMap[row.userId] = {
+          id: row.userId,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          email: row.email,
+          username: row.username,
+          phone: row.phone,
+          isActive: row.isActive,
+          roles: [],
+          unidadesResidenciales: [],
+        };
+      }
+      if (row.roleId) {
+        usersMap[row.userId].roles.push({
+          id: row.roleId,
+          name: row.roleName,
+          description: row.roleDescription,
+        });
+      }
+      if (row.unidadResidencialId && !usersMap[row.userId].unidadesResidenciales.includes(row.unidadResidencialId)) {
+        usersMap[row.userId].unidadesResidenciales.push(row.unidadResidencialId);
+      }
+    }
+    return Object.values(usersMap);
   }
 
   // Crear un usuario para la empresa
   public async createUserForCompany(companyId: string, data: any, unidades: string[] = []) {
-    // Validar que la empresa exista antes de la transacción
-    const empresaExiste = await db.from('am_empresas').where('id', companyId).first()
-    if (!empresaExiste) {
-      throw new Error('La empresa especificada no existe')
+    // Permitir que los roles vengan como string o number
+    // Normalizar y validar roles (acepta number o string, y maneja 0 correctamente)
+    let empresaRoleId: number | null = null;
+    let unidadRoleId: number | null = null;
+    // Normalización robusta
+    if (data.empresaRoleId !== undefined && data.empresaRoleId !== null && String(data.empresaRoleId).toString().trim() !== '' && !isNaN(Number(data.empresaRoleId)) && Number(data.empresaRoleId) > 0) {
+      empresaRoleId = Number(data.empresaRoleId);
     }
-    return await db.transaction(async (trx) => {
-      // Validar que el email no esté en uso en la empresa (usando la tabla pivote)
-      const existing = await db
-        .from('cf_usuarios as u')
-        .join('cf_usuario_empresa as ue', 'u.id', 'ue.usuario_id')
-        .where('ue.empresa_id', companyId)
-        .andWhere('u.correo', data.email)
-        .first()
-      if (existing) {
-        throw new Error('El correo ya está registrado en la empresa')
-      }
+    if (data.unidadRoleId !== undefined && data.unidadRoleId !== null && String(data.unidadRoleId).toString().trim() !== '' && !isNaN(Number(data.unidadRoleId)) && Number(data.unidadRoleId) > 0) {
+      unidadRoleId = Number(data.unidadRoleId);
+    }
+    // Debug: log the normalized values
+    console.log('[DEBUG] empresaRoleId:', empresaRoleId, 'unidadRoleId:', unidadRoleId, 'data:', data);
+    const hasEmpresaRole = typeof empresaRoleId === 'number' && empresaRoleId > 0;
+    const hasUnidadRole = typeof unidadRoleId === 'number' && unidadRoleId > 0;
+    if (!hasEmpresaRole && !hasUnidadRole) {
+      throw new Error('Debes especificar un rol de empresa o de unidad residencial (empresaRoleId o unidadRoleId > 0)')
+    }
+    if (hasEmpresaRole && hasUnidadRole) {
+      throw new Error('No puedes asignar ambos roles a la vez (empresaRoleId y unidadRoleId)')
+    }
 
+
+    // Determinar el id del usuario autenticado para asignado_por
+    // Si el controlador lo envía como data.asignadoPor, úsalo; si no, usa el id del usuario creado
+    const asignadoPor = data.asignadoPor || data.asignado_por || null;
+
+    return await db.transaction(async (trx) => {
       // Crear usuario
       const user = new User()
       user.useTransaction(trx)
       user.firstName = data.firstName
       user.lastName = data.lastName
       user.email = data.email
-      user.username = data.username || data.email // Si no viene username, usa el correo
-      user.phone = data.phone // Guardar teléfono
+      user.username = data.username || data.email
+      user.phone = data.phone
       user.password = await Hash.make(data.password)
       user.isActive = true
-      await user.save()
-
-      // Relacionar usuario con empresa en la tabla pivote
-      await trx.table('cf_usuario_empresa').insert({
-        usuario_id: user.id,
-        empresa_id: companyId,
-        created_at: DateTime.now().toSQL(),
-      })
-
-      // Asignar rol si se provee
-      if (data.roleId) {
-        await trx.table('cf_usuario_rol').insert({
-          usuario_id: user.id,
-          rol_id: data.roleId,
-          asignado_en: DateTime.now().toSQL(),
-          created_at: DateTime.now().toSQL(),
-          updated_at: DateTime.now().toSQL(),
-        })
+      const userSaved = await user.save()
+      if (!userSaved) {
+        throw new Error('No se pudo crear el usuario')
       }
 
-      // Asociar usuario a las unidades residenciales (tabla pivote)
-      for (const unidadId of unidades) {
-        await trx.table('cf_usuario_unidad_residencial').insert({
+      // Si es usuario de empresa
+      if (hasEmpresaRole && empresaRoleId !== null) {
+        // Validar existencia de empresa
+        const empresaExiste = await trx.from('am_empresas').where('id', companyId).first()
+        if (!empresaExiste) {
+          throw new Error('La empresa especificada no existe')
+        }
+        // Validar que el rol sea de tipo empresa
+        const rolEmpresa = await trx.from('cf_roles').where('id', empresaRoleId).first()
+        if (!rolEmpresa) {
+          throw new Error('El rol de empresa especificado no existe')
+        }
+        if (rolEmpresa.tipo_negocio_id !== 1) {
+          throw new Error('El rol asignado no corresponde a tipo empresa')
+        }
+        // Validar correo único en la empresa
+        const existing = await trx
+          .from('cf_usuarios as u')
+          .join('cf_usuario_empresa as ue', 'u.id', 'ue.usuario_id')
+          .where('ue.empresa_id', companyId)
+          .andWhere('u.correo', data.email)
+          .first()
+        if (existing) {
+          throw new Error('El correo ya está registrado en la empresa')
+        }
+        // Insertar en cf_usuario_empresa
+        const usuarioEmpresaArr = await trx.table('cf_usuario_empresa').insert({
           usuario_id: user.id,
-          unidad_residencial_id: unidadId,
+          empresa_id: companyId,
           created_at: DateTime.now().toSQL(),
-        })
+        }).returning('id')
+        if (!usuarioEmpresaArr || usuarioEmpresaArr.length === 0) {
+          throw new Error('No se pudo crear la relación usuario-empresa')
+        }
+        const usuarioEmpresa = usuarioEmpresaArr[0]
+        const usuarioEmpresaId = usuarioEmpresa.id || usuarioEmpresa
+        // Insertar en cf_usuario_empresa_roles
+        const empresaRolArr = await trx.table('cf_usuario_empresa_roles').insert({
+          usuario_empresa_id: usuarioEmpresaId,
+          rol_id: empresaRoleId,
+          asignado_por: asignadoPor || user.id,
+          activo: true,
+        }).returning('usuario_empresa_id')
+        if (!empresaRolArr || empresaRolArr.length === 0) {
+          throw new Error('No se pudo asignar el rol de empresa')
+        }
+
+        // Asociar unidades residenciales si se reciben (solo para rol de empresa)
+        const unidadesArray = data.unidades && Array.isArray(data.unidades) && data.unidades.length > 0 ? data.unidades : unidades;
+        if (Array.isArray(unidadesArray) && unidadesArray.length > 0) {
+          for (const unidadId of unidadesArray) {
+            await trx.table('cf_usuario_unidad_residencial').insert({
+              usuario_id: user.id,
+              unidad_residencial_id: unidadId,
+              created_at: DateTime.now().toSQL(),
+            });
+          }
+        }
+      }
+
+      // Si es usuario de unidad residencial
+      if (hasUnidadRole && unidadRoleId !== null) {
+        // Validar tipo de negocio del rol de unidad
+        const rolUnidad = await trx.from('cf_roles').where('id', unidadRoleId).first()
+        if (!rolUnidad) {
+          throw new Error('El rol de unidad especificado no existe')
+        }
+        if (rolUnidad.tipo_negocio_id !== 2) {
+          throw new Error('El rol asignado no corresponde a tipo unidad residencial')
+        }
+        // Validar que venga una sola unidad
+        const unidadesArray = data.unidades && Array.isArray(data.unidades) && data.unidades.length > 0 ? data.unidades : unidades
+        if (!unidadesArray || unidadesArray.length !== 1) {
+          throw new Error('Un usuario de unidad residencial debe estar asociado a una sola unidad.')
+        }
+        // Insertar en cf_usuario_unidad_residencial
+        const usuarioUnidadArr = await trx.table('cf_usuario_unidad_residencial').insert({
+          usuario_id: user.id,
+          unidad_residencial_id: unidadesArray[0],
+          created_at: DateTime.now().toSQL(),
+        }).returning('id')
+        if (!usuarioUnidadArr || usuarioUnidadArr.length === 0) {
+          throw new Error('No se pudo crear la relación usuario-unidad residencial')
+        }
+        const usuarioUnidad = usuarioUnidadArr[0]
+        const usuarioUnidadId = usuarioUnidad.id || usuarioUnidad
+        // Insertar en cf_usuario_unidad_roles
+        const unidadRolArr = await trx.table('cf_usuario_unidad_roles').insert({
+          usuario_unidad_id: usuarioUnidadId,
+          rol_id: unidadRoleId,
+          asignado_por: asignadoPor || user.id,
+          activo: true,
+        }).returning('usuario_unidad_id')
+        if (!unidadRolArr || unidadRolArr.length === 0) {
+          throw new Error('No se pudo asignar el rol de unidad residencial')
+        }
       }
 
       // Enviar correo de bienvenida al usuario
@@ -255,6 +401,30 @@ public async registerCompanyAndUser(data: {
 
   // Actualizar un usuario de la empresa (corrige búsqueda por tabla pivote)
   public async updateUserForCompany(companyId: string, userId: string, data: any, unidades: string[] = []) {
+    // Debug log para ver los valores recibidos
+    console.log('[DEBUG][updateUserForCompany] empresaRoleId:', data.empresaRoleId, 'unidadRoleId:', data.unidadRoleId, 'data:', data);
+    // Normalizar y validar roles (acepta number o string, y maneja 0 correctamente)
+    let empresaRoleId: number | null = null;
+    let unidadRoleId: number | null = null;
+    if (data.empresaRoleId !== undefined && data.empresaRoleId !== null && String(data.empresaRoleId).toString().trim() !== '' && !isNaN(Number(data.empresaRoleId)) && Number(data.empresaRoleId) > 0) {
+      empresaRoleId = Number(data.empresaRoleId);
+    }
+    if (data.unidadRoleId !== undefined && data.unidadRoleId !== null && String(data.unidadRoleId).toString().trim() !== '' && !isNaN(Number(data.unidadRoleId)) && Number(data.unidadRoleId) > 0) {
+      unidadRoleId = Number(data.unidadRoleId);
+    }
+    const hasEmpresaRole = typeof empresaRoleId === 'number' && empresaRoleId > 0;
+    const hasUnidadRole = typeof unidadRoleId === 'number' && unidadRoleId > 0;
+    if (!hasEmpresaRole && !hasUnidadRole) {
+      throw new Error('Debes especificar un rol de empresa o de unidad residencial (empresaRoleId o unidadRoleId > 0)')
+    }
+    if (hasEmpresaRole && hasUnidadRole) {
+      throw new Error('No puedes asignar ambos roles a la vez (empresaRoleId y unidadRoleId)')
+    }
+
+    // Determinar el id del usuario autenticado para asignado_por
+    // Siempre usar el id del usuario autenticado para asignado_por (no permitir fallback)
+    const asignadoPor = data.asignadoPor;
+
     return await db.transaction(async (trx) => {
       // Buscar usuario y verificar que pertenezca a la empresa usando la tabla pivote
       const usuarioEmpresa = await trx
@@ -296,36 +466,99 @@ public async registerCompanyAndUser(data: {
       if (data.password) user.password = await Hash.make(data.password)
       await user.useTransaction(trx).save()
 
-      // Actualizar rol si se envía
-      if (data.roleId) {
-        await user.related('roles').sync([data.roleId])
+      // Si es usuario de empresa
+      if (hasEmpresaRole && empresaRoleId !== null) {
+        // Validar existencia de empresa
+        const empresaExiste = await trx.from('am_empresas').where('id', companyId).first()
+        if (!empresaExiste) {
+          throw new Error('La empresa especificada no existe')
+        }
+        // Validar que el rol sea de tipo empresa
+        const rolEmpresa = await trx.from('cf_roles').where('id', empresaRoleId).first()
+        if (!rolEmpresa) {
+          throw new Error('El rol de empresa especificado no existe')
+        }
+        if (rolEmpresa.tipo_negocio_id !== 1) {
+          throw new Error('El rol asignado no corresponde a tipo empresa')
+        }
+        // Actualizar rol en cf_usuario_empresa_roles
+        // Eliminar roles actuales
+        await trx.from('cf_usuario_empresa_roles').where('usuario_empresa_id', usuarioEmpresa.id || usuarioEmpresa).delete()
+        // Insertar nuevo rol
+        await trx.table('cf_usuario_empresa_roles').insert({
+          usuario_empresa_id: usuarioEmpresa.id || usuarioEmpresa,
+          rol_id: empresaRoleId,
+          asignado_por: asignadoPor || user.id,
+          activo: true,
+        })
+
+        // Asociar unidades residenciales si se reciben (solo para rol de empresa)
+        const unidadesArray = data.unidades && Array.isArray(data.unidades) && data.unidades.length > 0 ? data.unidades : unidades;
+        if (Array.isArray(unidadesArray)) {
+          // Eliminar relaciones actuales
+          await trx.from('cf_usuario_unidad_residencial').where('usuario_id', user.id).delete()
+          // Insertar nuevas relaciones
+          for (const unidadId of unidadesArray) {
+            await trx.table('cf_usuario_unidad_residencial').insert({
+              usuario_id: user.id,
+              unidad_residencial_id: unidadId,
+              created_at: DateTime.now().toSQL(),
+            })
+          }
+        }
       }
 
-      // Actualizar unidades residenciales si se envía el arreglo
-      if (Array.isArray(unidades)) {
-        // Eliminar relaciones actuales
-        await trx.from('cf_usuario_unidad_residencial').where('usuario_id', user.id).delete()
-        // Insertar nuevas relaciones
-        for (const unidadId of unidades) {
-          await trx.table('cf_usuario_unidad_residencial').insert({
-            usuario_id: user.id,
-            unidad_residencial_id: unidadId,
-            created_at: DateTime.now().toSQL(),
-          })
+      // Si es usuario de unidad residencial
+      if (hasUnidadRole && unidadRoleId !== null) {
+        // Validar tipo de negocio del rol de unidad
+        const rolUnidad = await trx.from('cf_roles').where('id', unidadRoleId).first()
+        if (!rolUnidad) {
+          throw new Error('El rol de unidad especificado no existe')
         }
+        if (rolUnidad.tipo_negocio_id !== 2) {
+          throw new Error('El rol asignado no corresponde a tipo unidad residencial')
+        }
+        // Validar que venga una sola unidad
+        const unidadesArray = data.unidades && Array.isArray(data.unidades) && data.unidades.length > 0 ? data.unidades : unidades
+        if (!unidadesArray || unidadesArray.length !== 1) {
+          throw new Error('Un usuario de unidad residencial debe estar asociado a una sola unidad.')
+        }
+        // Eliminar relaciones actuales de usuario-unidad y roles
+        await trx.from('cf_usuario_unidad_residencial').where('usuario_id', user.id).delete()
+        // Insertar nueva relación usuario-unidad
+        const usuarioUnidadArr = await trx.table('cf_usuario_unidad_residencial').insert({
+          usuario_id: user.id,
+          unidad_residencial_id: unidadesArray[0],
+          created_at: DateTime.now().toSQL(),
+        }).returning('id')
+        const usuarioUnidad = usuarioUnidadArr[0]
+        const usuarioUnidadId = usuarioUnidad.id || usuarioUnidad
+        // Eliminar roles actuales de usuario-unidad
+        await trx.from('cf_usuario_unidad_roles').where('usuario_unidad_id', usuarioUnidadId).delete()
+        // Insertar nuevo rol de unidad
+        await trx.table('cf_usuario_unidad_roles').insert({
+          usuario_unidad_id: usuarioUnidadId,
+          rol_id: unidadRoleId,
+          asignado_por: asignadoPor || user.id,
+          activo: true,
+        })
+        // Eliminar roles de empresa si existen
+        await trx.from('cf_usuario_empresa_roles').where('usuario_empresa_id', usuarioEmpresa.id || usuarioEmpresa).delete()
       }
       return user
     })
   }
 
   // Eliminar un usuario de la empresa
-  public async deleteUserForCompany(companyId: string, userId: string) {
-    const user = await User.query().where('empresa_id', companyId).andWhere('id', userId).first()
+  public async deleteUserForCompany(userId: string) {
+    // Buscar el usuario en cf_usuarios por id y desactivar
+    const user = await User.find(userId);
     if (!user) {
-      throw new Error('Usuario no encontrado en la empresa')
+      throw new Error('Usuario no encontrado');
     }
-    await user.related('roles').detach()
-    await user.delete()
+    user.isActive = false;
+    await user.save();
+    return { message: 'Usuario eliminado correctamente (eliminación lógica).' };
   }
 
   // Obtener usuario por UUID con unidad residencial, rol y tipo de rol
@@ -345,22 +578,53 @@ public async registerCompanyAndUser(data: {
     const unidades = await db
       .from('cf_usuario_unidad_residencial as uur')
       .join('am_unidad_residencial as ur', 'uur.unidad_residencial_id', 'ur.id')
-      .select('ur.*')
+      .select([
+        'ur.id',
+        'ur.nombre',
+        'ur.documento',
+        'ur.tipo_documento_id',
+        'ur.empresa_id',
+        'ur.updated_at',
+        'uur.id as usuarioUnidadId'
+      ])
       .where('uur.usuario_id', userId)
+
+    // Buscar roles por contexto empresa
+    const empresaRoles = await db
+      .from('cf_usuario_empresa as ue')
+      .leftJoin('cf_usuario_empresa_roles as uer', 'ue.id', 'uer.usuario_empresa_id')
+      .leftJoin('cf_roles as r', 'uer.rol_id', 'r.id')
+      .select('r.id as roleId', 'r.nombre as roleName', 'ue.empresa_id')
+      .where('ue.usuario_id', userId)
+
+    // Buscar roles por contexto unidad residencial
+    const unidadRoles = await db
+      .from('cf_usuario_unidad_residencial as uur')
+      .leftJoin('cf_usuario_unidad_roles as uurr', 'uur.id', 'uurr.usuario_unidad_id')
+      .leftJoin('cf_roles as r', 'uurr.rol_id', 'r.id')
+      .select('r.id as roleId', 'r.nombre as roleName', 'uur.unidad_residencial_id')
+      .where('uur.usuario_id', userId)
+
+    // Unir roles de empresa y unidad en un solo arreglo
+    const roles = [
+      ...empresaRoles.filter(r => r.roleId).map(r => ({
+        id: r.roleId,
+        name: r.roleName,
+        context: 'empresa',
+        empresaId: r.empresa_id
+      })),
+      ...unidadRoles.filter(r => r.roleId).map(r => ({
+        id: r.roleId,
+        name: r.roleName,
+        context: 'unidad',
+        unidadResidencialId: r.unidad_residencial_id
+      }))
+    ];
 
     return {
       ...user.serialize(),
       unidadesResidenciales: unidades,
-      roles: user.roles.map((role) => ({
-        id: role.id,
-        name: role.name,
-        description: role.description,
-        businessType: role.businessType ? {
-          id: role.businessType.id,
-          name: role.businessType.name,
-          code: role.businessType.code,
-        } : null,
-      })),
+      roles,
     }
   }
 

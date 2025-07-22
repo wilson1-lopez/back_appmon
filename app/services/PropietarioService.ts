@@ -186,7 +186,7 @@ export default class PropietarioService {
       .from('am_personas')
       .join('am_propietarios_x_apto', 'am_personas.id', 'am_propietarios_x_apto.propietario_id')
       .join('am_tipos_documento', 'am_personas.tipo_documento_id', 'am_tipos_documento.id')
-      .join('am_tipos_documento_base', 'am_tipos_documento.tipo_base_id', 'am_tipos_documento_base.id')
+      .join('am_tipos_documento_base', 'am_tipos_documento.tipo_documento_base_id', 'am_tipos_documento_base.id')
       .where('am_propietarios_x_apto.apartamento_id', apartamentoId)
       .select(
         'am_personas.*',

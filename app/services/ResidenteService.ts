@@ -21,7 +21,7 @@ export default class ResidenteService {
       telefono?: string | null
       correo?: string | null
       apartamentoId: string
-      generoId?: number | null
+      //generoId?: number | 1
       unidadResidencialId?: string | null
     },
     fotoFile?: MultipartFile
@@ -42,7 +42,7 @@ export default class ResidenteService {
           telefono: data.telefono,
           correo: data.correo,
           fotoUrl: null, // Se actualizará después si hay foto
-          generoId: data.generoId,
+          generoId: 1, // Asignar un valor por defecto si no se proporciona
           unidadResidencialId: data.unidadResidencialId,
         },
         { client: trx }
@@ -103,7 +103,7 @@ export default class ResidenteService {
     correo?: string | null
     fotoUrl?: string | null
     apartamentoId: string
-    generoId?: number | null
+    generoId?: number | 1
     unidadResidencialId?: string | null
   }) {
     const trx = await db.transaction()
@@ -156,7 +156,7 @@ export default class ResidenteService {
       .from('am_personas')
       .join('am_residentes_x_apto', 'am_personas.id', 'am_residentes_x_apto.residente_id')
       .join('am_tipos_documento', 'am_personas.tipo_documento_id', 'am_tipos_documento.id')
-      .join('am_tipos_documento_base', 'am_tipos_documento.tipo_base_id', 'am_tipos_documento_base.id')
+      .join('am_tipos_documento_base', 'am_tipos_documento.tipo_documento_base_id', 'am_tipos_documento_base.id')
       .where('am_residentes_x_apto.apartamento_id', apartamentoId)
       .select(
         'am_personas.*',

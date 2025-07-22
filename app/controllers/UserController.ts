@@ -98,7 +98,8 @@ export default class UserController {
       if (!company) {
         return response.notFound({ error: 'Empresa no encontrada' })
       }
-      const data = request.only(['firstName', 'lastName', 'email', 'username', 'password', 'roleId', 'phone'])
+      const data: any = request.only(['firstName', 'lastName', 'email', 'username', 'password', 'roleId', 'phone', 'empresaRoleId', 'unidadRoleId'])
+      data.asignadoPor = auth.user.id
       const unidades = request.input('unidades', []) // arreglo de IDs de unidades residenciales
       const user = await this.userService.createUserForCompany(company.id, data, unidades)
       return response.created({ message: 'Usuario creado exitosamente', data: user })
@@ -120,7 +121,8 @@ export default class UserController {
       if (!company) {
         return response.notFound({ error: 'Empresa no encontrada' })
       }
-      const data = request.only(['firstName', 'lastName', 'email', 'username', 'isActive', 'roleId', 'phone', 'password'])
+      const data: any = request.only(['firstName', 'lastName', 'email', 'username', 'isActive', 'roleId', 'phone', 'password', 'empresaRoleId', 'unidadRoleId'])
+      data.asignadoPor = auth.user.id
       const unidades = request.input('unidades', []) // arreglo de IDs de unidades residenciales
       const user = await this.userService.updateUserForCompany(company.id, params.id, data, unidades)
       return response.ok({ message: 'Usuario actualizado exitosamente', data: user })
@@ -142,8 +144,8 @@ export default class UserController {
       if (!company) {
         return response.notFound({ error: 'Empresa no encontrada' })
       }
-      await this.userService.deleteUserForCompany(company.id, params.id)
-      return response.ok({ message: 'Usuario eliminado exitosamente' })
+      const result = await this.userService.deleteUserForCompany(params.id)
+      return response.ok(result)
     } catch (error) {
       return response.badRequest({ error: error.message })
     }

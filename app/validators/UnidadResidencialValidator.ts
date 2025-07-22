@@ -5,7 +5,7 @@ export const CreateUnidadResidencialValidator = schema.create({
   document: schema.string([rules.maxLength(50)]),
   name: schema.string([rules.maxLength(255)]),
   address: schema.string([rules.maxLength(500)]),
-  city: schema.string([rules.maxLength(100)]),
+  city: schema.number(),
   adminPhone: schema.string([rules.maxLength(20)]),
   supportPhone: schema.string([rules.maxLength(20)]),
   contactEmail: schema.string([rules.email(), rules.maxLength(255)]),

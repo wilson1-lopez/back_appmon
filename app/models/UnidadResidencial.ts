@@ -3,6 +3,7 @@ import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import DocumentType from './DocumentType.js'
 import Company from './Company.js'
+import City from './City.js'
 
 export default class UnidadResidencial extends BaseModel {
   public static table = 'am_unidad_residencial'
@@ -25,8 +26,8 @@ export default class UnidadResidencial extends BaseModel {
   @column({ columnName: 'direccion' })
   public address!: string
 
-  @column({ columnName: 'ciudad' })
-  public city!: string
+  @column({ columnName: 'ciudad_id' })
+  public ciudadId!: number
 
   @column({ columnName: 'telefono_administradora' })
   public adminPhone!: string
@@ -59,4 +60,9 @@ export default class UnidadResidencial extends BaseModel {
     foreignKey: 'companyId',
   })
   public company!: BelongsTo<typeof Company>
+
+  @belongsTo(() => City, {
+    foreignKey: 'ciudadId',
+  })
+  public city!: BelongsTo<typeof City>
 }
