@@ -20,17 +20,30 @@ export default class AuthService {
      * Helper para obtener usuario con roles y permisos
      */
     private async getUserWithRolesAndPermissions(identifier: string) {
-        // Traer usuario, empresas, roles y permisos (estructura multi-empresa)
+        // Traer usuario, empresas, roles y permisos (estructura multi-empresa y multi-unidad)
         const user = await User.query()
             .where('email', identifier)
             .orWhere('username', identifier)
-            .preload('empresas', (empresaQuery) => {
+            .preload('empresas', (empresaQuery: any) => {
                 empresaQuery.where('estado', true)
-                    .preload('roles', (rolQuery) => {
+                    .preload('roles', (rolQuery: any) => {
                         rolQuery.where('activo', true)
-                            .preload('role', (roleModelQuery) => {
+                            .preload('role', (roleModelQuery: any) => {
                                 roleModelQuery.where('estado', true)
-                                    .preload('permissions', (permissionQuery) => {
+                                    .preload('permissions', (permissionQuery: any) => {
+                                        permissionQuery.preload('feature')
+                                    })
+                            })
+                    })
+            })
+            // Precargar unidades residenciales y sus roles/permissions (no hay campo estado en la tabla pivote, así que no filtramos)
+            .preload('unidadesResidenciales', (usuarioUnidadQuery: any) => {
+                usuarioUnidadQuery
+                    .preload('roles', (rolQuery: any) => {
+                        rolQuery.where('activo', true)
+                            .preload('role', (roleModelQuery: any) => {
+                                roleModelQuery.where('estado', true)
+                                    .preload('permissions', (permissionQuery: any) => {
                                         permissionQuery.preload('feature')
                                     })
                             })
@@ -45,10 +58,11 @@ export default class AuthService {
      * Generar payload JWT con roles y permisos
      */
     private generateJWTPayload(user: any) {
-        // Extraer roles y permisos de todas las empresas
+        // Extraer roles y permisos de empresas y unidades residenciales
         const roles: any[] = []
         const permissions: any = {}
 
+        // Roles y permisos por empresa
         if (user.empresas && Array.isArray(user.empresas)) {
             user.empresas.forEach((empresa: any) => {
                 if (empresa.roles && Array.isArray(empresa.roles)) {
@@ -59,7 +73,47 @@ export default class AuthService {
                                 id: role.id,
                                 name: role.name,
                                 description: role.description,
+                                context: 'empresa',
                                 empresaId: empresa.empresaId || empresa.id
+                            })
+                            if (role.permissions && Array.isArray(role.permissions)) {
+                                role.permissions.forEach((permission: any) => {
+                                    const featureName = permission.feature?.name
+                                    if (!featureName) return
+                                    if (!permissions[featureName]) {
+                                        permissions[featureName] = {
+                                            featureId: permission.feature.id,
+                                            canView: false,
+                                            canCreate: false,
+                                            canEdit: false,
+                                            canDelete: false
+                                        }
+                                    }
+                                    permissions[featureName].canView = permissions[featureName].canView || permission.canView
+                                    permissions[featureName].canCreate = permissions[featureName].canCreate || permission.canCreate
+                                    permissions[featureName].canEdit = permissions[featureName].canEdit || permission.canEdit
+                                    permissions[featureName].canDelete = permissions[featureName].canDelete || permission.canDelete
+                                })
+                            }
+                        }
+                    })
+                }
+            })
+        }
+
+        // Roles y permisos por unidad residencial (visitantes, residentes, etc)
+        if (user.unidadesResidenciales && Array.isArray(user.unidadesResidenciales)) {
+            user.unidadesResidenciales.forEach((unidad: any) => {
+                if (unidad.roles && Array.isArray(unidad.roles)) {
+                    unidad.roles.forEach((usuarioUnidadRol: any) => {
+                        const role = usuarioUnidadRol.role
+                        if (role) {
+                            roles.push({
+                                id: role.id,
+                                name: role.name,
+                                description: role.description,
+                                context: 'unidad_residencial',
+                                unidadResidencialId: unidad.unidadResidencialId || unidad.id
                             })
                             if (role.permissions && Array.isArray(role.permissions)) {
                                 role.permissions.forEach((permission: any) => {
@@ -96,7 +150,7 @@ export default class AuthService {
             roles: roles,
             permissions: permissions
         }
-    }   
+    }
     
     public async login(identifier: string, password: string) {
         const user = await this.getUserWithRolesAndPermissions(identifier)

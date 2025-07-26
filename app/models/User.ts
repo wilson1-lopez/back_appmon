@@ -2,6 +2,7 @@ import { BaseModel, column, manyToMany, hasMany } from '@adonisjs/lucid/orm'
 import type { ManyToMany, HasMany } from '@adonisjs/lucid/types/relations'
 import Role from './Role.js'
 import UsuarioEmpresa from './UsuarioEmpresa.js'
+import UsuarioUnidadResidencial from './UsuarioUnidadResidencial.js'
 
 export default class User extends BaseModel {
   public static table = 'cf_usuarios'
@@ -39,6 +40,10 @@ export default class User extends BaseModel {
   // Relación hasMany con UsuarioEmpresa (empresas donde el usuario está vinculado)
   @hasMany(() => UsuarioEmpresa, { foreignKey: 'usuarioId' })
   public empresas!: HasMany<typeof UsuarioEmpresa>
+
+  // Relación hasMany con UsuarioUnidadResidencial (unidades residenciales donde el usuario está vinculado)
+  @hasMany(() => UsuarioUnidadResidencial, { foreignKey: 'usuarioId' })
+  public unidadesResidenciales!: HasMany<typeof UsuarioUnidadResidencial>
 
   @manyToMany(() => Role, {
     pivotTable: 'cf_usuario_empresa_roles',
