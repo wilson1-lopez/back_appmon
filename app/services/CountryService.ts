@@ -25,7 +25,7 @@ export default class CountryService {
   }
 
   public async getAllCountries() {
-    return await Country.all()
+    return await Country.query().where('estado', true)
   }
 
   // ...existing methods...
@@ -38,7 +38,10 @@ export default class CountryService {
     const documents = await DocumentType
       .query()
       .where('pais_id', countryId)
-      .preload('baseType') 
+      .whereHas('baseType', (query) => {
+        query.where('estado', true)
+      })
+      .preload('baseType')
 
     // Mapear la respuesta
     const documentOptions = documents.map(doc => ({

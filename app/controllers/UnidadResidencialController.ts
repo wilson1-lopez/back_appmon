@@ -34,9 +34,11 @@ export default class UnidadResidencialController {
       }
 
       const data = await request.validate({ schema: CreateUnidadResidencialValidator })
-      
-      const unidadResidencial = await this.unidadResidencialService.create(auth.user.email, data)
-      
+      // Obtener el archivo del request (el nombre debe coincidir con el campo enviado desde el front)
+      const logoFile = request.file('logoFile')
+
+      const unidadResidencial = await this.unidadResidencialService.create(auth.user.email, data, logoFile ?? undefined)
+
       return response.created({ 
         message: 'Unidad residencial creada exitosamente',
         data: unidadResidencial 

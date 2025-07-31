@@ -80,7 +80,7 @@ export default class UnidadResidencialService {
     supportPhone?: string
     contactEmail?: string
     description?: string
-  }) {
+  }, logoFile?: MultipartFile) {
     // ...validación se realiza en el validador, no aquí...
 
     // Normalizar los datos para aceptar ambos formatos
@@ -112,39 +112,90 @@ export default class UnidadResidencialService {
       throw new Error('Faltan campos obligatorios para crear la unidad residencial')
     }
 
-    // Obtener la empresa del usuario autenticado
-    const company = await this.getCompanyByUserEmail(userEmail)
+    // Usar transacción para evitar datos huérfanos y procesar el logo antes de que se consuma el archivo
+    let logoUrl: string | undefined
+    const unidadId = await db.transaction(async (trx) => {
+      // Obtener la empresa del usuario autenticado
+      const company = await this.getCompanyByUserEmail(userEmail)
 
-    // Verificar que no exista otra unidad con el mismo documento
-    const existingUnit = await UnidadResidencial.query()
-      .where('documento', document)
-      .andWhere('tipo_documento_id', documentTypeIdNum)
-      .first()
+      // Verificar que no exista otra unidad con el mismo documento
+      const existingUnit = await UnidadResidencial.query({ client: trx })
+        .where('documento', document)
+        .andWhere('tipo_documento_id', documentTypeIdNum)
+        .first()
 
-    if (existingUnit) {
-      throw new Error('Ya existe una unidad residencial con este número de documento')
+      if (existingUnit) {
+        throw new Error('Ya existe una unidad residencial con este número de documento')
+      }
+
+      // Crear la unidad residencial
+      const unidadResidencial = new UnidadResidencial()
+      unidadResidencial.documentTypeId = documentTypeIdNum
+      unidadResidencial.document = document
+      unidadResidencial.name = name
+      unidadResidencial.address = address
+      unidadResidencial.ciudadId = cityNum
+      unidadResidencial.adminPhone = adminPhone
+      unidadResidencial.supportPhone = supportPhone
+      unidadResidencial.contactEmail = contactEmail
+      unidadResidencial.description = description
+      unidadResidencial.companyId = company.id
+
+      await unidadResidencial.useTransaction(trx).save()
+
+      // Llamar al procedimiento almacenado para crear el schema privado de la unidad
+      const schemaName = `unidad_${unidadResidencial.id}`
+      await trx.rawQuery('CALL cf_crear_schema_unidad(?)', [schemaName])
+
+      // Insertar registro en cf_unidades_residenciales_esquemas (incluyendo el campo esquema)
+      await trx.table('cf_unidades_residenciales_esquemas').insert({
+        unidad_residencial_id: unidadResidencial.id,
+        esquema: schemaName
+      })
+
+      // Si se recibe un archivo de logo, guardarlo aquí (dentro de la transacción)
+      if (logoFile) {
+        // Validar el archivo
+        if (!logoFile.isValid) {
+          throw new Error(`Archivo inválido: ${logoFile.errors.map(e => e.message).join(', ')}`)
+        }
+        const uploadsDir = join(app.makePath('public'), 'uploads', 'unidades')
+        if (!existsSync(uploadsDir)) {
+          await mkdir(uploadsDir, { recursive: true })
+        }
+        // Eliminar logo anterior si existe (no debería haber en creación, pero por si acaso)
+        if (unidadResidencial.logoUrl) {
+          try {
+            const oldFileName = unidadResidencial.logoUrl.split('/').pop()
+            if (oldFileName) {
+              const oldFilePath = join(uploadsDir, oldFileName)
+              if (existsSync(oldFilePath)) {
+                await unlink(oldFilePath)
+              }
+            }
+          } catch (error) {
+            console.warn('Error al eliminar logo anterior:', error)
+          }
+        }
+        const fileExtension = logoFile.extname
+        const fileName = `unidad_${unidadResidencial.id}_${cuid()}.${fileExtension}`
+        await logoFile.move(uploadsDir, { name: fileName })
+        logoUrl = `/uploads/unidades/${fileName}`
+        unidadResidencial.logoUrl = logoUrl
+        await unidadResidencial.useTransaction(trx).save()
+      }
+
+      // Retornar solo el id para luego consultar fuera de la transacción
+      return unidadResidencial.id
+    })
+
+    // Consultar la unidad creada fuera de la transacción
+    const unidad = await this.getById(unidadId)
+    return {
+      message: 'Unidad residencial creada exitosamente',
+      data: unidad,
+      ...(logoUrl ? { logoUrl } : {})
     }
-
-    // Crear la unidad residencial
-    const unidadResidencial = new UnidadResidencial()
-    unidadResidencial.documentTypeId = documentTypeIdNum
-    unidadResidencial.document = document
-    unidadResidencial.name = name
-    unidadResidencial.address = address
-    unidadResidencial.ciudadId = cityNum
-    unidadResidencial.adminPhone = adminPhone
-    unidadResidencial.supportPhone = supportPhone
-    unidadResidencial.contactEmail = contactEmail
-    unidadResidencial.description = description
-    unidadResidencial.companyId = company.id
-
-    await unidadResidencial.save()
-
-    // Llamar al procedimiento almacenado para crear el schema privado de la unidad
-    const schemaName = `unidad_${unidadResidencial.id}`
-    await db.rawQuery('CALL cf_crear_schema_unidad(?)', [schemaName])
-
-    return await this.getById(unidadResidencial.id)
   }
 
   /**

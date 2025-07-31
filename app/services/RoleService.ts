@@ -5,6 +5,7 @@ import Role from "#models/Role";
 export default class RoleService {
   public async getAllRoles() {
     const roles = await Role.query()
+      .where('isActive', true)
       .select(['id', 'name', 'description', 'isActive', 'tipoNegocioId'])
       .preload('businessType', (query) => query.select(['id', 'name', 'code']))
     return roles.map(role => ({

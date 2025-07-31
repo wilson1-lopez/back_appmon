@@ -234,6 +234,11 @@ public async registerCompanyAndUser(data: {
   // Crear un usuario para la empresa
   public async createUserForCompany(companyId: string, data: any, unidades: string[] = []) {
     // Permitir que los roles vengan como string o number
+    // Validar que el correo no esté registrado en cf_usuarios
+    const existingUser = await db.from('cf_usuarios').where('correo', data.email).first();
+    if (existingUser) {
+      throw new Error('El correo ya está registrado en el sistema');
+    }
     // Normalizar y validar roles (acepta number o string, y maneja 0 correctamente)
     let empresaRoleId: number | null = null;
     let unidadRoleId: number | null = null;
@@ -254,7 +259,6 @@ public async registerCompanyAndUser(data: {
     if (hasEmpresaRole && hasUnidadRole) {
       throw new Error('No puedes asignar ambos roles a la vez (empresaRoleId y unidadRoleId)')
     }
-
 
     // Determinar el id del usuario autenticado para asignado_por
     // Si el controlador lo envía como data.asignadoPor, úsalo; si no, usa el id del usuario creado
@@ -428,12 +432,25 @@ public async registerCompanyAndUser(data: {
 
     return await db.transaction(async (trx) => {
       // Buscar usuario y verificar que pertenezca a la empresa usando la tabla pivote
-      const usuarioEmpresa = await trx
+      let usuarioEmpresa = await trx
         .from('cf_usuario_empresa')
         .where('empresa_id', companyId)
         .andWhere('usuario_id', userId)
         .first()
-      if (!usuarioEmpresa) {
+      // Si no existe y se va a asignar rol de empresa, crear la relación
+      if (!usuarioEmpresa && hasEmpresaRole && empresaRoleId !== null) {
+        const empresaExiste = await trx.from('am_empresas').where('id', companyId).first()
+        if (!empresaExiste) {
+          throw new Error('La empresa especificada no existe')
+        }
+        const usuarioEmpresaArr = await trx.table('cf_usuario_empresa').insert({
+          usuario_id: userId,
+          empresa_id: companyId,
+          created_at: DateTime.now().toSQL(),
+        }).returning('id')
+        usuarioEmpresa = usuarioEmpresaArr[0] || { id: usuarioEmpresaArr[0] }
+      }
+      if (!usuarioEmpresa && hasEmpresaRole && empresaRoleId !== null) {
         throw new Error('Usuario no encontrado en la empresa')
       }
       // Buscar usuario
@@ -533,18 +550,22 @@ public async registerCompanyAndUser(data: {
           created_at: DateTime.now().toSQL(),
         }).returning('id')
         const usuarioUnidad = usuarioUnidadArr[0]
-        const usuarioUnidadId = usuarioUnidad.id || usuarioUnidad
+        const usuarioUnidadId = usuarioUnidad && (usuarioUnidad.id || usuarioUnidad)
         // Eliminar roles actuales de usuario-unidad
-        await trx.from('cf_usuario_unidad_roles').where('usuario_unidad_id', usuarioUnidadId).delete()
-        // Insertar nuevo rol de unidad
-        await trx.table('cf_usuario_unidad_roles').insert({
-          usuario_unidad_id: usuarioUnidadId,
-          rol_id: unidadRoleId,
-          asignado_por: asignadoPor || user.id,
-          activo: true,
-        })
+        if (usuarioUnidadId) {
+          await trx.from('cf_usuario_unidad_roles').where('usuario_unidad_id', usuarioUnidadId).delete()
+          // Insertar nuevo rol de unidad
+          await trx.table('cf_usuario_unidad_roles').insert({
+            usuario_unidad_id: usuarioUnidadId,
+            rol_id: unidadRoleId,
+            asignado_por: asignadoPor || user.id,
+            activo: true,
+          })
+        }
         // Eliminar roles de empresa si existen
-        await trx.from('cf_usuario_empresa_roles').where('usuario_empresa_id', usuarioEmpresa.id || usuarioEmpresa).delete()
+        if (usuarioEmpresa) {
+          await trx.from('cf_usuario_empresa_roles').where('usuario_empresa_id', usuarioEmpresa.id || usuarioEmpresa).delete()
+        }
       }
       return user
     })
